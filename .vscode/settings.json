@@ -1,0 +1,81 @@
+{
+    "files.exclude": {
+        "out": true, // set this to true to hide the "out" folder with the compiled JS files
+        "dist": true,
+        "**/*.pyc": true,
+        ".nyc_output": true,
+        "obj": true,
+        "bin": true,
+        "**/__pycache__": true,
+        "**/node_modules": true,
+        ".vscode-test": false,
+        ".vscode test": false,
+        "**/.mypy_cache/**": true,
+        "*.egg-info": true,
+        "**/.pytest_cache": true,
+        ".ipynb_checkpoints/": true
+    },
+    "search.exclude": {
+        "out": true, // set this to false to include "out" folder in search results
+        "dist": true,
+        "**/node_modules": true,
+        "coverage": true,
+        "languageServer*/**": true,
+        ".vscode-test": true,
+        ".vscode test": true,
+        "**/.mypy_cache/**": true,
+        "*.egg-info": true,
+        "**/.pytest_cache": true,
+        ".ipynb_checkpoints/": true
+    },
+
+    // Python settings
+    "[python]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 4,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": true
+        },
+        "editor.formatOnSave": true
+    },
+
+    "python.languageServer": "Pylance",
+    "python.linting.pylintEnabled": false,
+    "cucumberautocomplete.skipDocStringsFormat": true,
+
+    // Use flake8 linting
+    "python.linting.enabled": true,
+    "python.linting.flake8Enabled": true,
+    "python.linting.flake8Args": ["--config=${workspaceFolder}/.flake8"],
+    "python.linting.mypyEnabled": true,
+    "python.linting.mypyArgs": ["--config-file=${workspaceFolder}/mypy.ini"],
+
+    // Use black for code formatting
+    "python.formatting.provider": "black",
+    "python.formatting.blackArgs": ["--config=${workspaceFolder}/pyproject.toml"],
+
+    // Test explorer
+    "python.testing.promptToConfigure": false,
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": ["tests"],
+    "python.testing.unittestEnabled": false,
+
+    // Paths to Python
+    "python.pythonPath": "${env:PYENV_ROOT}/versions/pointcloud-dl-env/bin/python",
+
+    // JSON, YAML & TOML settings
+    "[JSON]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true
+    },
+    "[YAML]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.insertSpaces": true,
+        "editor.formatOnSave": true
+    },
+    "[toml]": {
+        "editor.formatOnSave": false
+    },
+    "evenBetterToml.semanticTokens": false,
+    "evenBetterToml.formatter.indentTables": false,
+}
