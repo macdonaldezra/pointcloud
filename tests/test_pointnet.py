@@ -1,6 +1,5 @@
 import torch
-
-from pointcloud.model import (
+from pointcloud.models.pointnet import (
     PointNetClassifier,
     PointNetSegmentor,
     TNet,
