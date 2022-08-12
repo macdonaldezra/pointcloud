@@ -160,13 +160,15 @@ def read_ply_file(filepath: Path, include_labels: bool = True) -> List[np.ndarra
 
     return (
         points.astype(np.float32),
-        colors.astype(np.uint8),
+        colors.astype(np.float32),
         data["class"].astype(np.uint8),
     )
 
 
-def set_header_properties(field_list, field_names):
-
+def set_header_properties(field_list: List[np.ndarray], field_names: List[str]):
+    """
+    Set header properties for an outputted .ply file.
+    """
     # List of lines to write
     lines = []
 

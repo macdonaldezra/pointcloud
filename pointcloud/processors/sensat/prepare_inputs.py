@@ -1,15 +1,17 @@
 import pickle
 import time
+from ast import parse
 from pathlib import Path
 
 import numpy as np
+from pointcloud.utils.cli import parse_input_preprocessing_args
 from pointcloud.utils.io import read_ply_file, write_ply_file
 from pointcloud.utils.subsampling import grid_subsampling
 from sklearn.neighbors import KDTree
 
 
 def prepare_sensat_pointcloud_data(
-    data_path: Path, grid_size: float = 0.1, leaf_size: int = 50
+    data_path: Path, grid_size: float = 0.2, leaf_size: int = 50
 ) -> None:
     """
     Read in pointcloud training and testing pointcloud files and perform the following:
@@ -20,20 +22,20 @@ def prepare_sensat_pointcloud_data(
 
     Args:
         data_path (Path): A path to pointcloud data files with th
-        grid_size (float, optional): The size of the voxel grid to be used in grid sub-sampling task. Defaults to 0.1.
+        grid_size (float, optional): The size of the voxel grid to be used in grid sub-sampling task. Defaults to 0.2.
         leaf_size (int, optional): The size of the leafs used to store each subset of pointclouds in the KDTree. Defaults to 50.
 
     Raises:
-        ValueError: When the output directory already exists, ie. we have already computed a grid subsampling for that dataset; or
-            when the data directory doesn't contain test or train subdirectories.
+        ValueError: When the data directory doesn't contain test or train subdirectories.
     """
     output_path = data_path / f"grid_{grid_size}"
     if output_path.exists():
-        raise ValueError(
-            f"Directory with voxel grid of size: {grid_size} already exists. Either delete that directory or use those files."
+        print(
+            f"Directory with voxel grid of size: {grid_size} already exists. Only preparing ply files "
+            + "for files that do not exist in that directory."
         )
 
-    output_path.mkdir()
+    output_path.mkdir(exist_ok=True)
     test_path = data_path / "test"
     train_path = data_path / "train"
     if not test_path.exists() or not train_path.exists():
@@ -48,6 +50,12 @@ def prepare_sensat_pointcloud_data(
     all_files = train_files + test_files
 
     for filepath in all_files:
+        if (output_path / f"{filepath.stem}_sample.ply").exists():
+            print(
+                f"Skipping processing {filepath.stem} as a downsampled version of this file already exists."
+            )
+            continue
+
         print(f"Starting to process {filepath.stem}")
         if filepath in test_files:
             points, colors = read_ply_file(filepath, include_labels=False)
@@ -61,7 +69,7 @@ def prepare_sensat_pointcloud_data(
                 points, features=colors, labels=labels, sampleDl=grid_size
             )
 
-            # If there are more than one column for sub_labels, then make it so there's only one.
+            # If there are more than one column for sub_    labels, then make it so there's only one.
             if sub_labels.shape[1] > 1:
                 sub_labels = np.squeeze(sub_labels)
 
@@ -86,3 +94,8 @@ def prepare_sensat_pointcloud_data(
         )
 
     print("Done in {:.1f}s".format(time.time() - t0))
+
+
+if __name__ == "__main__":
+    args = parse_input_preprocessing_args()
+    prepare_sensat_pointcloud_data(args.data_directory, args.grid_size, args.leaf_size)

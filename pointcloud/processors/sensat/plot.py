@@ -17,6 +17,22 @@ LABEL_COLORS = [
     [0, 191, 255],  # water ->  skyblue
 ]
 
+LABELS = {
+    0: "Ground",
+    1: "High Vegetation",
+    2: "Buildings",
+    3: "Walls",
+    4: "Bridge",
+    5: "Parking",
+    6: "Rail",
+    7: "traffic Roads",
+    8: "Street Furniture",
+    9: "Cars",
+    10: "Footpath",
+    11: "Bikes",
+    12: "Water",
+}
+
 
 def draw_pointcloud(points: np.ndarray, point_colors: np.ndarray) -> None:
     """
@@ -88,6 +104,6 @@ def draw_voxelgrid(
     o3.geometry.PointCloud.estimate_normals(pointcloud)
 
     voxel_grid = o3.geometry.VoxelGrid.create_from_point_cloud(
-        pointcloud, voxel_size=0.1
+        pointcloud, voxel_size=voxel_size
     )
     o3.visualization.draw_geometries([voxel_grid])
