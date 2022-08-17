@@ -1,11 +1,12 @@
 import pickle
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 import numpy as np
 import torch
 from pointcloud.config import DATA_PATH
 from pointcloud.processors.base import PointCloudDataset
+from pointcloud.processors.sensat.preprocessing import get_sensat_model_inputs
 from pointcloud.utils.files import get_files
 
 from ...utils.io import read_ply_file
@@ -35,8 +36,12 @@ TEST_FILES = [
     "cambridge_block_27",
 ]
 
-# TODO: Create a list of files for validation files so we can split out train files
-# more explicitly.
+VALIDATION_FILES = [
+    "birmingham_block_1",
+    "birmingham_block_5",
+    "cambridge_block_10",
+    "cambridge_block_7",
+]
 
 
 class SensatDataset(PointCloudDataset):
@@ -46,10 +51,16 @@ class SensatDataset(PointCloudDataset):
 
     def __init__(
         self,
-        train: bool = False,
-        batch_limit: int = 10000,
+        transform: Callable[
+            [np.ndarray, np.ndarray, np.ndarray],
+            list[np.ndarray, np.ndarray, np.ndarray],
+        ],
+        data_partition: str = "train",
+        max_points: int = 10000,
         data_path: Path = DATA_PATH / "sensat_urban",
         labels: Dict[int, str] = LABELS,
+        shuffle_indices: bool = False,
+        include_labels: bool = True,
     ) -> None:
         """
         Initialize SensatUrban Pointcloud dataset.
@@ -58,19 +69,17 @@ class SensatDataset(PointCloudDataset):
             self, name="SensatUrban", data_path=data_path, labels=labels
         )
 
-        self.training = train
-        self.batch_limit = batch_limit
+        self.data_partition = data_partition
+        self.max_points = max_points
         self.data_path = data_path
+        self.shuffle_indices = shuffle_indices
+        self.include_labels = include_labels
 
-        self.input_trees = []
-        self.input_colors = []
-        self.input_labels = []
-        self.pot_trees = []
         self.num_clouds = 0
-        self.test_projection = []
-        self.validation_labels = []
+        self.input_files = []
 
-        # Load data into input_trees, pot_trees, input_labels, and input_colors
+        # load files into the input_files list
+        self.load_data_files()
 
         # Use potentials
         self.potentials = []
@@ -94,112 +103,122 @@ class SensatDataset(PointCloudDataset):
         self.epoch_indices = None
 
     def __getitem__(self, index) -> Any:
-        return self.get_potential_item(index)
+        """
+        Read in pre-processed voxel-sampled file from a pointcloud file in pointcloud dataset
+        and get a set of points within the same given area from that pointcloud
+        """
+        points, features, labels = read_ply_file(
+            self.input_files[index % len(self.input_files)]
+        )
+        points, features, labels = get_sensat_model_inputs(points, features, labels)
 
-    def load_all_data(self) -> None:
+        return points, features, labels
+
+    def load_data_files(self) -> None:
         """
         Load all data into this dataset class.
+
+        TODO: Sensat .ply files have very different sizes. We need to seriously think
+        about at least splitting up larger files into smaller files in order to ensure that
+        the datasets are appropriately sampled during training and validation.
         """
-        if self.training:
-            tree_files = get_files(exclude_files=TEST_FILES, pattern="*_KDTree.pkl")
-            point_files = get_files(exclude_files=TEST_FILES)
-        else:
-            tree_files = get_files(exclude_files=TEST_FILES, pattern="*_KDTree.pkl")
-            point_files = get_files(exclude_files=TEST_FILES)
-
-        for file in point_files:
-            # Load data from sub-sampled .ply files
-            _, colors, labels = read_ply_file(file)
-            self.input_colors.append(colors)
-            self.input_labels.append(labels)
-
-        for file in tree_files:
-            # Load pointclouds already loaded into KDTree files
-            with open(file, "rb") as tree_file:
-                tree = pickle.load(tree_file)
-                self.input_trees.append(tree)
-
-    def get_potential_item(self, batch_index: int):
-
-        batch_size = 0
-
-        all_points = []
-        all_features = []
-        all_labels = []
-        all_input_indices = []
-        point_indices = []
-        cloud_indices = []
-
-        while batch_size < self.batch_limit:
-
-            cloud_index = int(torch.argmin(self.min_potentials))
-            point_index = int(self.argmin_potentials[cloud_index])
-
-            # Get potential points from tree structure
-            potential_points = np.array(self.pot_trees[point_index, :].data, copy=False)
-            center_point = potential_points[point_index, :].reshape(1, -1)
-
-            # Get indices of points in the input region
-            # TODO: Make radius of the input sphere (value for input_radius) configurable.
-            input_radius = 1.0
-            potential_indices, distances = self.pot_trees[cloud_index].query_radius(
-                center_point, r=input_radius, return_distance=True
+        if "train" in self.data_partition:
+            self.input_files = get_files(
+                exclude_files=TEST_FILES + VALIDATION_FILES, pattern="*_sample.ply"
             )
+        elif "test" in self.data_partition:
+            self.input_files = get_files(
+                include_files=TEST_FILES, pattern="*_sample.ply"
+            )
+        elif "validation" in self.data_partition:
+            self.input_files = get_files(
+                include_files=VALIDATION_FILES, pattern="*_sample.ply"
+            )
+        else:
+            # Load all files from data path that have pattern *_sample.ply
+            self.input_files = list(self.data_path.glob("*_sample.ply"))
 
-            dist_squared = np.square(distances[0])
-            potential_indices = potential_indices[0]
+    # def get_potential_item(self, batch_index: int):
 
-            tukey_loss = np.square(1 - dist_squared / np.square(input_radius))
-            tukey_loss[dist_squared > np.square(input_radius)] = 0
-            self.potentials[cloud_index][potential_indices] += tukey_loss
+    #     batch_size = 0
 
-            min_index = torch.argmin(self.potentials[cloud_index])
-            self.min_potentials[[cloud_index]] = self.potentials[cloud_index][min_index]
-            self.argmin_potentials[[cloud_index]] = min_index
+    #     all_points = []
+    #     all_features = []
+    #     all_labels = []
+    #     all_input_indices = []
+    #     point_indices = []
+    #     cloud_indices = []
 
-            points = np.array(self.input_trees[cloud_index].data, copy=False)
-            input_indices = self.input_trees[cloud_index].query_radius(
-                center_point, r=input_radius
-            )[0]
-            n = input_indices.shape[0]
+    #     while batch_size < self.batch_limit:
 
-            if n < 2:
-                # don't add this pointcloud to the batch as it represents an empty sphere
-                continue
+    #         cloud_index = int(torch.argmin(self.min_potentials))
+    #         point_index = int(self.argmin_potentials[cloud_index])
 
-            input_points = (points[input_indices] - center_point).astype(np.float32)
-            input_colors = self.input_colors[cloud_index][input_indices]
-            if self.training:
-                input_labels = self.input_labels[cloud_index][input_indices]
-                input_labels = np.array([self.label_to_index[l] for l in input_labels])
-            else:
-                input_labels = np.zeros(input_points.shape[0])
+    #         # Get potential points from tree structure
+    #         potential_points = np.array(self.pot_trees[point_index, :].data, copy=False)
+    #         center_point = potential_points[point_index, :].reshape(1, -1)
 
-            input_features = np.hstack(
-                (input_colors, input_points[:, 2:] + center_point[:, 2:])
-            ).astype(np.float32)
+    #         # Get indices of points in the input region
+    #         # TODO: Make radius of the input sphere (value for input_radius) configurable.
+    #         input_radius = 1.0
+    #         potential_indices, distances = self.pot_trees[cloud_index].query_radius(
+    #             center_point, r=input_radius, return_distance=True
+    #         )
 
-            # Add this iterations points to lists
-            all_points.append(input_points)
-            all_features.append(input_features)
-            all_labels.append(input_labels)
-            all_input_indices.append(input_indices)
-            point_indices.append(point_index)
-            cloud_indices.append(cloud_index)
+    #         dist_squared = np.square(distances[0])
+    #         potential_indices = potential_indices[0]
 
-            batch_size += n
+    #         tukey_loss = np.square(1 - dist_squared / np.square(input_radius))
+    #         tukey_loss[dist_squared > np.square(input_radius)] = 0
+    #         self.potentials[cloud_index][potential_indices] += tukey_loss
 
-        # Concatenate each component of the batch
-        stacked_points = np.concatenate(all_points, axis=0)
-        features = np.concatenate(all_features, axis=0)
-        labels = np.concatenate(all_labels, axis=0)
-        input_inds = np.concatenate(all_input_indices, axis=0)
-        stack_lengths = np.array([p.shape[0] for p in all_points], dtype=np.int32)
+    #         min_index = torch.argmin(self.potentials[cloud_index])
+    #         self.min_potentials[[cloud_index]] = self.potentials[cloud_index][min_index]
+    #         self.argmin_potentials[[cloud_index]] = min_index
 
-        stacked_features = np.ones_like(stacked_points[:, :1], dtype=np.float32)
-        np.hstack((stacked_features, features))
+    #         points = np.array(self.input_trees[cloud_index].data, copy=False)
+    #         input_indices = self.input_trees[cloud_index].query_radius(
+    #             center_point, r=input_radius
+    #         )[0]
+    #         n = input_indices.shape[0]
 
-        # Get segmentation inputs
-        # input_list += [cloud_indices, point_indices, input_indices]
+    #         if n < 2:
+    #             # don't add this pointcloud to the batch as it represents an empty sphere
+    #             continue
 
-        return [cloud]
+    #         input_points = (points[input_indices] - center_point).astype(np.float32)
+    #         input_colors = self.input_colors[cloud_index][input_indices]
+    #         if self.training:
+    #             input_labels = self.input_labels[cloud_index][input_indices]
+    #             input_labels = np.array([self.label_to_index[l] for l in input_labels])
+    #         else:
+    #             input_labels = np.zeros(input_points.shape[0])
+
+    #         input_features = np.hstack(
+    #             (input_colors, input_points[:, 2:] + center_point[:, 2:])
+    #         ).astype(np.float32)
+
+    #         # Add this iterations points to lists
+    #         all_points.append(input_points)
+    #         all_features.append(input_features)
+    #         all_labels.append(input_labels)
+    #         all_input_indices.append(input_indices)
+    #         point_indices.append(point_index)
+    #         cloud_indices.append(cloud_index)
+
+    #         batch_size += n
+
+    #     # Concatenate each component of the batch
+    #     stacked_points = np.concatenate(all_points, axis=0)
+    #     features = np.concatenate(all_features, axis=0)
+    #     labels = np.concatenate(all_labels, axis=0)
+    #     input_inds = np.concatenate(all_input_indices, axis=0)
+    #     stack_lengths = np.array([p.shape[0] for p in all_points], dtype=np.int32)
+
+    #     stacked_features = np.ones_like(stacked_points[:, :1], dtype=np.float32)
+    #     np.hstack((stacked_features, features))
+
+    #     # Get segmentation inputs
+    #     # input_list += [cloud_indices, point_indices, input_indices]
+
+    #     return [cloud]
