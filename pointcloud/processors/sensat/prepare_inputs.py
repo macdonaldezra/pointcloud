@@ -1,6 +1,5 @@
 import pickle
 import time
-from ast import parse
 from pathlib import Path
 
 import numpy as np
@@ -69,7 +68,7 @@ def prepare_sensat_pointcloud_data(
                 points, features=colors, labels=labels, sampleDl=grid_size
             )
 
-            # If there are more than one column for sub_    labels, then make it so there's only one.
+            # If there are more than one column for sub_ labels, then make it so there's only one.
             if sub_labels.shape[1] > 1:
                 sub_labels = np.squeeze(sub_labels)
 

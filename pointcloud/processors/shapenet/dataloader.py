@@ -4,11 +4,10 @@ import numpy as np
 import open3d as o3
 import torch
 from PIL import Image
-
 from pointcloud.config import DATA_PATH
 
 
-class ShapeNetDataset(torch.utils.data.Dataset):
+class ShapeNetDataLoader(torch.utils.data.Dataset):
     """
     Preprocess ShapeNet dataset
     """

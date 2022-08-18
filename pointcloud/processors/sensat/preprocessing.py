@@ -1,4 +1,4 @@
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 import torch
@@ -8,9 +8,12 @@ def get_sensat_model_inputs(
     points: np.ndarray,
     features: np.ndarray,
     labels: np.ndarray,
-    transform: Callable[
-        [np.ndarray, np.ndarray, np.ndarray], list[np.ndarray, np.ndarray, np.ndarray]
-    ],
+    transform: Optional[
+        Callable[
+            [np.ndarray, np.ndarray, np.ndarray],
+            list[np.ndarray, np.ndarray, np.ndarray],
+        ]
+    ] = None,
     training: bool = True,
     shuffle_indices: bool = False,
     max_points: int = 80000,

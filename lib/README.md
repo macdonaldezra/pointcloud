@@ -6,7 +6,9 @@ This has been retrieved from [point-transformer](https://github.com/POSTECH-CVLa
 To install the CUDA functions in this directory, run the following (assuming you have a NVIDIA GPU with architecture 6.1):
 
 ```bash
-TORCH_CUDA_ARCH_LIST="6.1" MAX_JOBS=4 FORCE_CUDA=1 python3 setup.py install
+# Please ensure you have installed the required Python dependencies before
+# by following the instructions found in the README in the root directory.
+TORCH_CUDA_ARCH_LIST="6.1" MAX_JOBS=4 FORCE_CUDA=1 python pointops/setup.py install
 ```
 
 Note that the value for TORCH_CUDA_ARCH_LIST must match the architecture for the GPU that the functions are compiled on whicch can be found [here](https://developer.nvidia.com/cuda-gpus#compute)

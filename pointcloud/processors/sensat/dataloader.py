@@ -1,6 +1,6 @@
 import pickle
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 import numpy as np
 import torch
@@ -44,17 +44,19 @@ VALIDATION_FILES = [
 ]
 
 
-class SensatDataset(PointCloudDataset):
+class SensatDataLoader(PointCloudDataset):
     """
     PyTorch dataset for SensatUrban dataset.
     """
 
     def __init__(
         self,
-        transform: Callable[
-            [np.ndarray, np.ndarray, np.ndarray],
-            list[np.ndarray, np.ndarray, np.ndarray],
-        ],
+        transform: Optional[
+            Callable[
+                [np.ndarray, np.ndarray, np.ndarray],
+                list[np.ndarray, np.ndarray, np.ndarray],
+            ]
+        ] = None,
         data_partition: str = "train",
         max_points: int = 10000,
         data_path: Path = DATA_PATH / "sensat_urban",
@@ -74,6 +76,7 @@ class SensatDataset(PointCloudDataset):
         self.data_path = data_path
         self.shuffle_indices = shuffle_indices
         self.include_labels = include_labels
+        self.transform = transform
 
         self.num_clouds = 0
         self.input_files = []
@@ -81,26 +84,28 @@ class SensatDataset(PointCloudDataset):
         # load files into the input_files list
         self.load_data_files()
 
-        # Use potentials
-        self.potentials = []
-        self.min_potentials = []
-        self.argmin_potentials = []
-        for tree in self.pot_trees:
-            self.potentials.append(
-                torch.from_numpy(np.random.rand(tree.data.shape[0]) * 1e-3)
-            )
-            min_index = int(torch.argmin(self.potentials[-1]))
-            self.argmin_potentials.append(min_index)
-            self.min_potentials.append(float(self.potentials[-1][min_index]))
+        # Commented out code at this point is making use of another point selection
+        # method that can be used for collecting a sample of pointcloud points.
+        #
+        # self.potentials = []
+        # self.min_potentials = []
+        # self.argmin_potentials = []
+        # for tree in self.pot_trees:
+        #     self.potentials.append(
+        #         torch.from_numpy(np.random.rand(tree.data.shape[0]) * 1e-3)
+        #     )
+        #     min_index = int(torch.argmin(self.potentials[-1]))
+        #     self.argmin_potentials.append(min_index)
+        #     self.min_potentials.append(float(self.potentials[-1][min_index]))
 
-        self.argmin_potentials = torch.from_numpy(
-            np.array(self.argmin_potentials, dtype=np.int64)
-        )
-        self.min_potentials = torch.from_numpy(
-            np.array(self.min_potentials, dtype=np.float64)
-        )
-        self.epoch_index = 0
-        self.epoch_indices = None
+        # self.argmin_potentials = torch.from_numpy(
+        #     np.array(self.argmin_potentials, dtype=np.int64)
+        # )
+        # self.min_potentials = torch.from_numpy(
+        #     np.array(self.min_potentials, dtype=np.float64)
+        # )
+        # self.epoch_index = 0
+        # self.epoch_indices = None
 
     def __getitem__(self, index) -> Any:
         """
@@ -124,15 +129,21 @@ class SensatDataset(PointCloudDataset):
         """
         if "train" in self.data_partition:
             self.input_files = get_files(
-                exclude_files=TEST_FILES + VALIDATION_FILES, pattern="*_sample.ply"
+                data_path=self.data_path,
+                exclude_files=TEST_FILES + VALIDATION_FILES,
+                pattern="*_sample.ply",
             )
         elif "test" in self.data_partition:
             self.input_files = get_files(
-                include_files=TEST_FILES, pattern="*_sample.ply"
+                data_path=self.data_path,
+                include_files=TEST_FILES,
+                pattern="*_sample.ply",
             )
         elif "validation" in self.data_partition:
             self.input_files = get_files(
-                include_files=VALIDATION_FILES, pattern="*_sample.ply"
+                data_path=self.data_path,
+                include_files=VALIDATION_FILES,
+                pattern="*_sample.ply",
             )
         else:
             # Load all files from data path that have pattern *_sample.ply
