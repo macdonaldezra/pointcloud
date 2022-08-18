@@ -1,6 +1,6 @@
 # PointCloud DL
 
-A repository for training and building PointCloud deep learning models with
+A repository for training and building PointCloud deep learning models with PyTorch. This repository currently contains data loaders for the [Sensat Urban](https://paperswithcode.com/dataset/sensaturban) and [ShapeNet](https://shapenet.org/) datasets as well as implementations of the [Point-Transformer](https://github.com/POSTECH-CVLab/point-transformer) and [PointNet](https://paperswithcode.com/paper/pointnet-deep-learning-on-point-sets-for-3d) models.
 
 ## Install
 
