@@ -30,3 +30,21 @@ def get_files(
                     all_files.remove(file)
 
     return all_files
+
+
+def distribute_indices(files: List[Path]) -> List[int]:
+    """
+    Given a list of files, select the minimum sized file, and return
+    a list that contains indices for other files that occurs with the
+    same frequency.
+    """
+    file_sizes = [file.stat().st_size for file in files]
+
+    min_size = min(file_sizes)
+    indices = []
+    for index, size in enumerate(file_sizes):
+        count = round(size / min_size)
+        for i in range(count):
+            indices.append(index)
+
+    return indices

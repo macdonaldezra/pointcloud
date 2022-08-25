@@ -7,7 +7,7 @@ import torch
 from pointcloud.config import DATA_PATH
 from pointcloud.processors.base import PointCloudDataset
 from pointcloud.processors.sensat.preprocessing import get_sensat_model_inputs
-from pointcloud.utils.files import get_files
+from pointcloud.utils.files import distribute_indices, get_files
 
 from ...utils.io import read_ply_file
 
@@ -58,11 +58,12 @@ class SensatDataLoader(PointCloudDataset):
             ]
         ] = None,
         data_partition: str = "train",
-        max_points: int = 10000,
+        max_points: int = 80000,
         data_path: Path = DATA_PATH / "sensat_urban",
         labels: Dict[int, str] = LABELS,
         shuffle_indices: bool = False,
         include_labels: bool = True,
+        distribute_files: bool = True,
     ) -> None:
         """
         Initialize SensatUrban Pointcloud dataset.
@@ -77,12 +78,18 @@ class SensatDataLoader(PointCloudDataset):
         self.shuffle_indices = shuffle_indices
         self.include_labels = include_labels
         self.transform = transform
+        self.distribute_files = distribute_files
 
         self.num_clouds = 0
         self.input_files = []
+        self.file_indices = []
 
         # load files into the input_files list
         self.load_data_files()
+        if self.distribute_files:
+            print(
+                f"Number of iterations required before (somewhat) evenly sampling all files: {len(self.file_indices)}"
+            )
 
         # Commented out code at this point is making use of another point selection
         # method that can be used for collecting a sample of pointcloud points.
@@ -109,23 +116,29 @@ class SensatDataLoader(PointCloudDataset):
 
     def __getitem__(self, index) -> Any:
         """
-        Read in pre-processed voxel-sampled file from a pointcloud file in pointcloud dataset
-        and get a set of points within the same given area from that pointcloud
+        Read in pre-processed voxel-sampled .ply file contents and return randomly sampled
+        pointcloud data, feature, and label points.
         """
-        points, features, labels = read_ply_file(
-            self.input_files[index % len(self.input_files)]
+        if self.distribute_files:
+            index = self.file_indices[index % len(self.file_indices)]
+        else:
+            index = index % len(self.input_files)
+
+        points, features, labels = read_ply_file(self.input_files[index])
+        points, features, labels = get_sensat_model_inputs(
+            points,
+            features,
+            labels,
+            transform=self.transform,
+            shuffle_indices=self.shuffle_indices,
+            max_points=self.max_points,
         )
-        points, features, labels = get_sensat_model_inputs(points, features, labels)
 
         return points, features, labels
 
     def load_data_files(self) -> None:
         """
         Load all data into this dataset class.
-
-        TODO: Sensat .ply files have very different sizes. We need to seriously think
-        about at least splitting up larger files into smaller files in order to ensure that
-        the datasets are appropriately sampled during training and validation.
         """
         if "train" in self.data_partition:
             self.input_files = get_files(
@@ -148,6 +161,8 @@ class SensatDataLoader(PointCloudDataset):
         else:
             # Load all files from data path that have pattern *_sample.ply
             self.input_files = list(self.data_path.glob("*_sample.ply"))
+
+        self.file_indices = distribute_indices(self.input_files)
 
     # def get_potential_item(self, batch_index: int):
 
