@@ -175,7 +175,7 @@ class RandomlyShiftBrightness(object):
     """
 
     def __init__(
-        self, probability: float = 0.15, range: Tuple[float, float] = [0.4, 1.2]
+        self, probability: float = 0.95, range: Tuple[float, float] = [0.4, 1.2]
     ) -> None:
         self.probability = probability
         self.range = range
@@ -185,23 +185,18 @@ class RandomlyShiftBrightness(object):
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         if np.random.rand() < self.probability:
             features[:, :3] *= np.random.uniform(self.range[0], self.range[1])
-            features[:, :3] = np.clip(features[:, :3], 0, 1)
+            features[:, :3] = np.clip(features[:, :3], 0, 255)
 
         return points, features, labels
 
 
-# NOTE: I have thus far been unable to get any of the below transforms
-# to demonstrate visually reliable results. At this point, I would not
-# recommend using them in a training context.
 class ChromaticColorContrast(object):
     """
-    Apply chromatic auto-contrast to point colors.
-
-
+    Randomly apply chromatic auto-contrast to point colors.
     """
 
     def __init__(
-        self, probability: float = 0.3, blend_factor: Optional[float] = None
+        self, probability: float = 0.5, blend_factor: Optional[float] = None
     ) -> None:
         self.probability = probability
         self.blend_factor = blend_factor
@@ -209,17 +204,18 @@ class ChromaticColorContrast(object):
     def __call__(
         self, points: np.ndarray, features: np.ndarray, labels: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        if not self.blend_factor:
-            blend_factor = np.random.rand()
-        else:
-            blend_factor = self.blend_factor
-
         if np.random.rand() < self.probability:
-            min = np.min(features, 0, keepdims=True)
-            max = np.min(features, 0, keepdims=True)
-            scale = 255 / (max - min)
+            if not self.blend_factor:
+                blend_factor = np.random.rand()
+            else:
+                blend_factor = self.blend_factor
 
-            contrast = (features[:, :3] - min) * scale
+            min_vals = np.min(features, 0, keepdims=True)
+            max_vals = np.max(features, 0, keepdims=True)
+
+            scale = 255 / (max_vals - min_vals)
+
+            contrast = (features[:, :3] - min_vals) * scale
             features[:, :3] = (1 - blend_factor) * features[
                 :, :3
             ] + blend_factor * contrast
@@ -240,11 +236,6 @@ class ChromaticColorTranslation(object):
         self, points: np.ndarray, features: np.ndarray, labels: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         if np.random.rand() < self.probability:
-            # If color points have been scaled to values from 0 to 1, then
-            # rescale them to rgb
-            if np.max(points) < 2:
-                points *= 255
-
             translation = (np.random.rand(1, 3) - 0.5) * 255 * 2 * self.ratio
             features[:, :3] = np.clip(translation + features[:, :3], 0, 255)
 
@@ -276,34 +267,89 @@ class HueSaturationTranslation(object):
     Apply hue and saturation to point colors.
     """
 
-    def __init__(self, hue_max: float = 0.15, saturation_max: float = 0.5) -> None:
+    def __init__(self, hue_max: float = 0.5, saturation_max: float = 0.2) -> None:
         self.hue_max = hue_max
         self.saturation_max = saturation_max
-        self.hsv_to_rgb = np.vectorize(colorsys.hsv_to_rgb)
-        self.rgb_to_hsv = np.vectorize(colorsys.rgb_to_hsv)
 
     def __call__(
         self, points: np.ndarray, features: np.ndarray, labels: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        if np.max(features) < 2:
-            features *= 255
+        hsv_color = HueSaturationTranslation.rgb_to_hsv(features[:, :3])
 
-        hsv_color = np.stack(
-            self.rgb_to_hsv(features[:, 0], features[:, 1], features[:, 2]), axis=1
-        )
-        hue = (np.random.rand() - 0.5) * 2 * self.saturation_max
+        hue = (np.random.rand() - 0.5) * 2 * self.hue_max
         saturation = 1 + (np.random.rand() - 0.5) * 2 * self.saturation_max
 
         hsv_color[:, 0] = np.remainder(hue + hsv_color[:, 0] + 1, 1)
         hsv_color[:, 1] = np.clip(saturation * hsv_color[:, 1], 0, 1)
         features[:, :3] = np.clip(
-            np.stack(
-                self.hsv_to_rgb(hsv_color[:, 0], hsv_color[:, 1], hsv_color[:, 1]),
-                axis=1,
-            )
-            / 255,
-            0,
-            1,
+            HueSaturationTranslation.hsv_to_rgb(hsv_color), 0, 255
         )
 
         return points, features, labels
+
+    @staticmethod
+    def rgb_to_hsv(rgb: np.ndarray) -> np.ndarray:
+        """
+        Given an nx3 numpy array of RGB colors, return the HSV color format.
+
+        Vectorized implementation of colorsys.rgb_to_hsv retrieved from:
+            https://github.com/POSTECH-CVLab/point-transformer
+
+        Params:
+            rgb: An nx3 array containing RGB colors where numbers are of type float32.
+
+        Returns:
+            An nx3 array containing HSV colors.
+        """
+        hsv = np.zeros_like(rgb)
+
+        # in case an RGBA array was passed, just copy the A channel
+        hsv[..., 3:] = rgb[..., 3:]
+        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        maxc = np.max(rgb[..., :3], axis=-1)
+        minc = np.min(rgb[..., :3], axis=-1)
+        hsv[..., 2] = maxc
+        mask = maxc != minc
+        hsv[mask, 1] = (maxc - minc)[mask] / maxc[mask]
+        rc = np.zeros_like(r)
+        gc = np.zeros_like(g)
+        bc = np.zeros_like(b)
+        rc[mask] = (maxc - r)[mask] / (maxc - minc)[mask]
+        gc[mask] = (maxc - g)[mask] / (maxc - minc)[mask]
+        bc[mask] = (maxc - b)[mask] / (maxc - minc)[mask]
+        hsv[..., 0] = np.select(
+            [r == maxc, g == maxc], [bc - gc, 2.0 + rc - bc], default=4.0 + gc - rc
+        )
+        hsv[..., 0] = (hsv[..., 0] / 6.0) % 1.0
+
+        return hsv
+
+    @staticmethod
+    def hsv_to_rgb(hsv: np.ndarray):
+        """
+        Given an nx3 numpy array of HSV colors, return the RGB color format.
+
+        Vectorized implementation of colorsys.hsv_to_rgb retrieved from:
+            https://github.com/POSTECH-CVLab/point-transformer
+
+        Params:
+            hsv: An nx3 array containing HSV colors where numbers are of type float32.
+
+        Returns:
+            An nx3 array containing RGB colors.
+        """
+        rgb = np.empty_like(hsv)
+        rgb[..., 3:] = hsv[..., 3:]
+        h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+        i = h * 6.0
+        f = (h * 6.0) - i
+        p = v * (1.0 - s)
+        q = v * (1.0 - s * f)
+        t = v * (1.0 - s * (1.0 - f))
+        i = i % 6
+        conditions = [s == 0.0, i == 1, i == 2, i == 3, i == 4, i == 5]
+        rgb[..., 0] = np.select(conditions, [v, q, p, p, t, v], default=v)
+        rgb[..., 1] = np.select(conditions, [v, v, v, q, p, p], default=t)
+        rgb[..., 2] = np.select(conditions, [v, p, t, v, v, q], default=p)
+
+        return rgb

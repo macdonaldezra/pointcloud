@@ -24,11 +24,41 @@ def parse_input_preprocessing_args() -> NamedTuple:
     parser = argparse.ArgumentParser(
         description="Parse command line args for training a segmentation model."
     )
-    parser.add_argument("-g", "--grid-size", type=float, default=0.2)
     parser.add_argument(
-        "-d", "--data-directory", type=Path, default=DATA_PATH / "sensat_urban"
+        "-g",
+        "--grid-size",
+        type=float,
+        default=0.2,
+        help="The size of the voxel grid to be used in outputted sub-sampled pointclouds.",
     )
-    parser.add_argument("-l", "--leaf-size", type=int, default=50)
+    parser.add_argument(
+        "-d",
+        "--data-directory",
+        type=Path,
+        default=DATA_PATH / "sensat_urban",
+        help="The data directory to read .ply files from.",
+    )
+    parser.add_argument(
+        "-l",
+        "--leaf-size",
+        type=int,
+        default=50,
+        help="Integer to indicate the size of each KD-Tree leaf.",
+    )
+    parser.add_argument(
+        "-k",
+        "--kd-tree",
+        type=bool,
+        default=False,
+        help="Boolean to indicate whether or not to generate KD-Tree for pointcloud points.",
+    )
+    parser.add_argument(
+        "-p",
+        "--proj",
+        type=bool,
+        default=False,
+        help="Boolean to indicate whether or not to generate projection for pointcloud points.",
+    )
 
     args = parser.parse_args()
     validate_filepath(args.data_directory)

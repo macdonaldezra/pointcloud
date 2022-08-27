@@ -44,7 +44,7 @@ VALIDATION_FILES = [
 ]
 
 
-class SensatDataLoader(PointCloudDataset):
+class SensatDataSet(PointCloudDataset):
     """
     PyTorch dataset for SensatUrban dataset.
     """
@@ -135,6 +135,12 @@ class SensatDataLoader(PointCloudDataset):
         )
 
         return points, features, labels
+
+    def __len__(self) -> int:
+        if self.distribute_files:
+            return len(self.file_indices)
+        else:
+            return len(self.input_files)
 
     def load_data_files(self) -> None:
         """

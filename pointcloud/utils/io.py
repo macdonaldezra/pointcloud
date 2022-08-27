@@ -140,7 +140,9 @@ def parse_ply_file(filepath: Path, triangular_mesh: bool = False) -> np.ndarray:
     return data
 
 
-def read_ply_file(filepath: Path, include_labels: bool = True) -> List[np.ndarray]:
+def read_ply_file(
+    filepath: Path, include_labels: bool = True
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Read a .ply file and return the points, color, and labels.
 

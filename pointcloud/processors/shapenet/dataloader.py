@@ -7,7 +7,7 @@ from PIL import Image
 from pointcloud.config import DATA_PATH
 
 
-class ShapeNetDataLoader(torch.utils.data.Dataset):
+class ShapeNetDataSet(torch.utils.data.Dataset):
     """
     Preprocess ShapeNet dataset
     """

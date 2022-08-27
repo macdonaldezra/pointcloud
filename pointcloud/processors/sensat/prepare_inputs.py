@@ -10,7 +10,11 @@ from sklearn.neighbors import KDTree
 
 
 def prepare_sensat_pointcloud_data(
-    data_path: Path, grid_size: float = 0.2, leaf_size: int = 50
+    data_path: Path,
+    grid_size: float,
+    leaf_size: int,
+    create_kd_tree: bool,
+    create_proj: bool,
 ) -> None:
     """
     Read in pointcloud training and testing pointcloud files and perform the following:
@@ -21,8 +25,10 @@ def prepare_sensat_pointcloud_data(
 
     Args:
         data_path (Path): A path to pointcloud data files with th
-        grid_size (float, optional): The size of the voxel grid to be used in grid sub-sampling task. Defaults to 0.2.
-        leaf_size (int, optional): The size of the leafs used to store each subset of pointclouds in the KDTree. Defaults to 50.
+        grid_size (float): The size of the voxel grid to be used in grid sub-sampling task. Defaults to 0.2.
+        leaf_size (int): The size of the leafs used to store each subset of pointclouds in the KDTree. Defaults to 50.
+        create_kd_tree (bool): Indicates whether or not to output a KDTree for PointClouds.
+        create_proj (bool): Indicates whether or not to output a projection of PointCloud points.
 
     Raises:
         ValueError: When the data directory doesn't contain test or train subdirectories.
@@ -72,19 +78,17 @@ def prepare_sensat_pointcloud_data(
             if sub_labels.shape[1] > 1:
                 sub_labels = np.squeeze(sub_labels)
 
-        # Normalize colors if they haven't been normalized between 0 and 1 already.
-        if np.max(sub_colors[:, 0]) > 1:
-            sub_colors = sub_colors / 255
+        if create_kd_tree:
+            search_tree = KDTree(sub_points, leaf_size=leaf_size)
+            with open(output_path / f"{filepath.stem}_KDTree.pkl", "wb") as outfile:
+                pickle.dump(search_tree, outfile)
 
-        search_tree = KDTree(sub_points, leaf_size=leaf_size)
-        with open(output_path / f"{filepath.stem}_KDTree.pkl", "wb") as outfile:
-            pickle.dump(search_tree, outfile)
-
-        projected_indices = np.squeeze(
-            search_tree.query(sub_points, return_distance=False)
-        )
-        with open(output_path / f"{filepath.stem}_proj.pkl", "wb") as outfile:
-            pickle.dump([projected_indices, sub_labels], outfile)
+        if create_proj:
+            projected_indices = np.squeeze(
+                search_tree.query(sub_points, return_distance=False)
+            )
+            with open(output_path / f"{filepath.stem}_proj.pkl", "wb") as outfile:
+                pickle.dump([projected_indices, sub_labels], outfile)
 
         write_ply_file(
             output_path / f"{filepath.stem}_sample.ply",
@@ -97,4 +101,6 @@ def prepare_sensat_pointcloud_data(
 
 if __name__ == "__main__":
     args = parse_input_preprocessing_args()
-    prepare_sensat_pointcloud_data(args.data_directory, args.grid_size, args.leaf_size)
+    prepare_sensat_pointcloud_data(
+        args.data_directory, args.grid_size, args.leaf_size, args.kd_tree, args.proj
+    )
