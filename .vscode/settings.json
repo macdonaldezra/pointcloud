@@ -52,7 +52,7 @@
 
     // Use black for code formatting
     "python.formatting.provider": "black",
-    "python.formatting.blackArgs": ["--config=${workspaceFolder}/pyproject.toml"],
+    // "python.formatting.blackArgs": ["--config=${workspaceFolder}/pyproject.toml"],
 
     // Test explorer
     "python.testing.promptToConfigure": false,
