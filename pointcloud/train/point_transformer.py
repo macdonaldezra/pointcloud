@@ -1,13 +1,17 @@
 import logging
+import random
 import shutil
 import typing as T
+from cgi import print_form
 from pathlib import Path
 
 import numpy as np
 import pointcloud.utils.transforms as transformers
 import torch
 from pointcloud.config import DATA_PATH
-from pointcloud.models.pointtransformer import PointTransformerSeg
+from pointcloud.models.pointtransformer import (
+    pointtransformer_seg_repro as PointTransformer,
+)
 from pointcloud.processors.sensat.dataset import LABELS, SensatDataSet
 from tensorboardX import SummaryWriter
 
@@ -86,17 +90,17 @@ def get_transformers(choose: int = 3) -> transformers.DataTransformer:
     """
     return transformers.DataTransformer(
         transforms=[
-            transformers.RandomPointRotation,
-            transformers.RandomPointScale,
-            transformers.RandomPointShift,
-            transformers.RandomPointFlip,
-            transformers.RandomPointJitter,
-            transformers.RandomlyDropColor,
-            transformers.RandomlyShiftBrightness,
-            transformers.ChromaticColorContrast,
-            transformers.ChromaticColorTranslation,
-            transformers.ChromaticColorJitter,
-            transformers.HueSaturationTranslation,
+            transformers.RandomPointRotation(),
+            transformers.RandomPointScale(),
+            transformers.RandomPointShift(),
+            transformers.RandomPointFlip(),
+            transformers.RandomPointJitter(),
+            transformers.RandomlyDropColor(),
+            transformers.RandomlyShiftBrightness(),
+            transformers.ChromaticColorContrast(),
+            transformers.ChromaticColorTranslation(),
+            transformers.ChromaticColorJitter(),
+            transformers.HueSaturationTranslation(),
         ],
         choose=choose,
     )
@@ -122,6 +126,17 @@ def collate_fn(
         torch.cat(labels),
         torch.IntTensor(offset),
     )
+
+
+def manual_seed(seed: int) -> None:
+    """
+    Seed random, numpy, and PyTorch.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 
 def train(
@@ -153,6 +168,9 @@ def train(
             features.cuda(non_blocking=True),
             labels.cuda(non_blocking=True),
             offset.cuda(non_blocking=True),
+        )
+        logger.info(
+            f"Shapes: points - {points.size()}, features - {features.size()}, labels - {labels.size()}, offset - {offset.size()}"
         )
         output = model([points, features, offset])
         if labels.shape[-1] == 1:
@@ -338,6 +356,8 @@ def validate(
 
 
 def main(
+    feature_dim: int,
+    num_classes: int,
     learning_rate: float,
     momentum: float,
     weight_decay: float,
@@ -346,6 +366,7 @@ def main(
     batch_size: int,
     max_points: int,
     save_frequency: int,
+    data_path: Path,
     save_path: Path,
     weights_path: T.Optional[Path] = None,
     checkpoint_path: T.Optional[Path] = None,
@@ -356,8 +377,13 @@ def main(
 
     Currently this directory and routine is only configured to train on the Sensat Urban dataset.
     """
+    logger = get_logger()
+    if not torch.cuda.is_available():
+        logger.info(f"CUDA must be available for model to run.")
+
     loss_function = torch.nn.CrossEntropyLoss()
-    model = PointTransformerSeg()
+    model = PointTransformer(c=feature_dim, k=num_classes)
+    model = torch.nn.DataParallel(model.cuda())
     optimizer = torch.optim.SGD(
         model.parameters(),
         lr=learning_rate,
@@ -365,15 +391,14 @@ def main(
         weight_decay=weight_decay,
     )
     scheduler = torch.optim.lr_scheduler.MultiStepLR(
-        optimizer, milestones=[int(epochs * 0.6), int(epochs * 0.8)], gamme=0.1
+        optimizer, milestones=[int(epochs * 0.6), int(epochs * 0.8)], gamma=0.1
     )
 
-    logger = get_logger()
     tensorboard_writer = SummaryWriter(tensorboard_path.as_posix())
     start_epoch = 0
     best_iou = 0
 
-    if weights_path.is_file():
+    if weights_path and weights_path.is_file():
         checkpoint = torch.load(weights_path.as_posix())
         model.load_state_dict(checkpoint["state_dict"])
         logger.info(f"Loaded weights from {weights_path.as_posix()}")
@@ -394,12 +419,13 @@ def main(
         logger.info(
             f"Loaded checkpoint from: {checkpoint_path.as_posix()} at epoch {start_epoch}"
         )
-    elif checkpoint:
+    elif checkpoint_path:
         logger.info(f"No checkpoint found at {checkpoint_path.as_posix()}")
 
     # Load training and potentially validation data loaders
     training_data = SensatDataSet(
-        split="train",
+        data_partition="train",
+        data_path=data_path,
         transform=get_transformers(),
         shuffle_indices=True,
         max_points=max_points,
@@ -411,16 +437,19 @@ def main(
         batch_size=batch_size,
         shuffle=True,
         drop_last=True,
+        pin_memory=True,
         collate_fn=collate_fn,
     )
 
     if include_validation:
-        validation_data = SensatDataSet(split="validate", max_points=max_points)
+        validation_data = SensatDataSet(
+            data_partition="validation", data_path=data_path, max_points=max_points
+        )
         validation_loader = torch.utils.data.DataLoader(
             validation_data,
-            batch_size=batch_size,
-            shuffle=True,
+            batch_size=4,
             drop_last=True,
+            pin_memory=True,
             collate_fn=collate_fn,
         )
     else:
@@ -428,7 +457,15 @@ def main(
 
     for epoch in range(start_epoch, epochs):
         loss_train, average_IoU_train, average_acc_train, all_acc_train = train(
-            training_loader, model, loss_function, optimizer, epoch
+            data_loader=training_loader,
+            model=model,
+            loss_function=loss_function,
+            optimizer=optimizer,
+            logger=logger,
+            tensorboard_writer=tensorboard_writer,
+            current_epoch=epoch,
+            epochs=epochs,
+            num_classes=num_classes,
         )
 
         epoch_log = epoch + 1
@@ -439,7 +476,15 @@ def main(
 
         if include_validation:
             loss_val, average_IoU_val, average_acc_val, all_acc_val = validate(
-                validation_loader, model, loss_function
+                data_loader=validation_loader,
+                model=model,
+                loss_function=loss_function,
+                optimizer=optimizer,
+                logger=logger,
+                tensorboard_writer=tensorboard_writer,
+                current_epoch=epoch,
+                epochs=epochs,
+                num_classes=num_classes,
             )
 
             tensorboard_writer.add_scalar("loss_val", loss_val, epoch_log)
@@ -478,14 +523,23 @@ def main(
 if __name__ == "__main__":
     # TODO: Move these configurations to a Pydantic object and add functionality
     # to load configurations from YAML files.
+    tensorboard_path = DATA_PATH / "tensorboard"
+    tensorboard_path.mkdir(exist_ok=True)
+    save_path = DATA_PATH / "model"
+    save_path.mkdir(exist_ok=True)
+    manual_seed(32)
+
     main(
+        feature_dim=6,
+        num_classes=len(LABELS),
         learning_rate=0.5,
         momentum=0.9,
         weight_decay=0.0001,
         epochs=5,
-        tensorboard_path=(DATA_PATH / "tensorboard").mkdir(exist_ok=True, parents=True),
+        tensorboard_path=tensorboard_path,
         batch_size=16,
         max_points=80000,
         save_frequency=1,
-        save_path=(DATA_PATH / "model").mkdir(exist_ok=True, parents=True),
+        data_path=DATA_PATH / "sensat_urban" / "grid_0.2",
+        save_path=save_path,
     )

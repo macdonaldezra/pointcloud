@@ -29,7 +29,7 @@ class DataTransformer(object):
         if self.choose and self.choose > 0:
             # Number of transforms to randomly select from the set of all transforms to apply
             # to the input values.
-            apply_transforms = random.choice(self.transforms, k=self.choose)
+            apply_transforms = random.choices(self.transforms, k=self.choose)
         else:
             apply_transforms = self.transforms
 

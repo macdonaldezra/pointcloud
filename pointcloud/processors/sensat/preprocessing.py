@@ -56,13 +56,15 @@ def get_sensat_model_inputs(
 
     min_point = np.min(points, 0)
     points -= min_point
+
     if np.max(features) > 1:
         # default normalization to divide all additional features by 255 as
         # you would for RGB colors
-        labels /= 255
+        features = torch.FloatTensor(features) / 255.0
+    else:
+        features = torch.FloatTensor(features)
 
-    return (
-        torch.FloatTensor(points),
-        torch.FloatTensor(features),
-        torch.LongTensor(labels),
-    )
+    points = torch.FloatTensor(points)
+    labels = torch.LongTensor(labels)
+
+    return (points, features, labels)
