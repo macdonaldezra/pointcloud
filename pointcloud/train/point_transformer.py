@@ -1,8 +1,12 @@
 import logging
+import shutil
 import typing as T
+from pathlib import Path
 
 import numpy as np
+import pointcloud.utils.transforms as transformers
 import torch
+from pointcloud.config import DATA_PATH
 from pointcloud.models.pointtransformer import PointTransformerSeg
 from pointcloud.processors.sensat.dataset import LABELS, SensatDataSet
 from tensorboardX import SummaryWriter
@@ -74,6 +78,50 @@ def get_logger() -> logging.RootLogger:
     logger.addHandler(handler)
 
     return logger
+
+
+def get_transformers(choose: int = 3) -> transformers.DataTransformer:
+    """
+    Load all of the transforms and return the data transformer class.
+    """
+    return transformers.DataTransformer(
+        transforms=[
+            transformers.RandomPointRotation,
+            transformers.RandomPointScale,
+            transformers.RandomPointShift,
+            transformers.RandomPointFlip,
+            transformers.RandomPointJitter,
+            transformers.RandomlyDropColor,
+            transformers.RandomlyShiftBrightness,
+            transformers.ChromaticColorContrast,
+            transformers.ChromaticColorTranslation,
+            transformers.ChromaticColorJitter,
+            transformers.HueSaturationTranslation,
+        ],
+        choose=choose,
+    )
+
+
+def collate_fn(
+    batch: torch.Tensor,
+) -> T.Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Overrides the default collate_fn provided by the dataloader. For more
+    on this function, see here:
+        https://pytorch.org/docs/stable/data.html#working-with-collate-fn
+    """
+    points, features, labels = list(zip(*batch))
+    offset, count = [], 0
+    for item in points:
+        count += item.shape[0]
+        offset.append(count)
+
+    return (
+        torch.cat(points),
+        torch.cat(features),
+        torch.cat(labels),
+        torch.IntTensor(offset),
+    )
 
 
 def train(
@@ -287,3 +335,157 @@ def validate(
     logger.info("<<<<<<<<<<<<<<<<< End Evaluation <<<<<<<<<<<<<<<<<")
 
     return (loss_counter.average, average_iou, average_accuracy, total_accuracy)
+
+
+def main(
+    learning_rate: float,
+    momentum: float,
+    weight_decay: float,
+    epochs: int,
+    tensorboard_path: Path,
+    batch_size: int,
+    max_points: int,
+    save_frequency: int,
+    save_path: Path,
+    weights_path: T.Optional[Path] = None,
+    checkpoint_path: T.Optional[Path] = None,
+    include_validation: bool = True,
+) -> None:
+    """
+    The main training loop that performs train and validation steps to train point_transformer.
+
+    Currently this directory and routine is only configured to train on the Sensat Urban dataset.
+    """
+    loss_function = torch.nn.CrossEntropyLoss()
+    model = PointTransformerSeg()
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=learning_rate,
+        momentum=momentum,
+        weight_decay=weight_decay,
+    )
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(
+        optimizer, milestones=[int(epochs * 0.6), int(epochs * 0.8)], gamme=0.1
+    )
+
+    logger = get_logger()
+    tensorboard_writer = SummaryWriter(tensorboard_path.as_posix())
+    start_epoch = 0
+    best_iou = 0
+
+    if weights_path.is_file():
+        checkpoint = torch.load(weights_path.as_posix())
+        model.load_state_dict(checkpoint["state_dict"])
+        logger.info(f"Loaded weights from {weights_path.as_posix()}")
+
+    # Load model from checkpoint if checkpoint filepath is provided
+    if checkpoint_path and checkpoint_path.exists():
+        logging.info(f"Loading checkpoint from: {checkpoint_path.as_posix()}")
+
+        checkpoint = torch.load(
+            checkpoint.as_posix(), map_location=lambda storage, loc: storage.cuda()
+        )
+        start_epoch = checkpoint["epoch"]
+        model.load_state_dict(checkpoint["state_dict"], strict=True)
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        scheduler.load_state_dict(checkpoint["scheduler"])
+        best_iou = checkpoint["best_iou"]
+
+        logger.info(
+            f"Loaded checkpoint from: {checkpoint_path.as_posix()} at epoch {start_epoch}"
+        )
+    elif checkpoint:
+        logger.info(f"No checkpoint found at {checkpoint_path.as_posix()}")
+
+    # Load training and potentially validation data loaders
+    training_data = SensatDataSet(
+        split="train",
+        transform=get_transformers(),
+        shuffle_indices=True,
+        max_points=max_points,
+    )
+    logger.info(f"Count of training data samples: {len(training_data)}")
+
+    training_loader = torch.utils.data.DataLoader(
+        training_data,
+        batch_size=batch_size,
+        shuffle=True,
+        drop_last=True,
+        collate_fn=collate_fn,
+    )
+
+    if include_validation:
+        validation_data = SensatDataSet(split="validate", max_points=max_points)
+        validation_loader = torch.utils.data.DataLoader(
+            validation_data,
+            batch_size=batch_size,
+            shuffle=True,
+            drop_last=True,
+            collate_fn=collate_fn,
+        )
+    else:
+        validation_loader = None
+
+    for epoch in range(start_epoch, epochs):
+        loss_train, average_IoU_train, average_acc_train, all_acc_train = train(
+            training_loader, model, loss_function, optimizer, epoch
+        )
+
+        epoch_log = epoch + 1
+        tensorboard_writer.add_scalar("loss_train", loss_train, epoch_log)
+        tensorboard_writer.add_scalar("average_IoU_train", average_IoU_train, epoch_log)
+        tensorboard_writer.add_scalar("average_acc_train", average_acc_train, epoch_log)
+        tensorboard_writer.add_scalar("all_acc_train", all_acc_train, epoch_log)
+
+        if include_validation:
+            loss_val, average_IoU_val, average_acc_val, all_acc_val = validate(
+                validation_loader, model, loss_function
+            )
+
+            tensorboard_writer.add_scalar("loss_val", loss_val, epoch_log)
+            tensorboard_writer.add_scalar("average_IoU_val", average_IoU_val, epoch_log)
+            tensorboard_writer.add_scalar("average_acc_val", average_acc_val, epoch_log)
+            tensorboard_writer.add_scalar("all_acc_val", all_acc_val, epoch_log)
+
+            is_best = average_IoU_val > best_iou
+            best_iou = max(best_iou, average_IoU_val)
+
+        if epoch % save_frequency == 0:
+            filepath = save_path / "model_latest.pth"
+            logger.info(f"Saving model checkpoint to: {filepath}")
+            torch.save(
+                {
+                    "epoch": epoch_log,
+                    "state_dict": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "scheduler": scheduler.state_dict(),
+                    "best_iou": best_iou,
+                    "is_best": is_best,
+                },
+                filepath.as_posix(),
+            )
+
+            if is_best:
+                logger.info(
+                    f"Best validation average Intersection/Union updated to: {best_iou:.4f}"
+                )
+                shutil.copyfile(filepath, save_path / "model_best.pth")
+
+    tensorboard_writer.close()
+    logger.info(f"Training Complete!\nBest Intersection/Union Recorded: {best_iou:.4f}")
+
+
+if __name__ == "__main__":
+    # TODO: Move these configurations to a Pydantic object and add functionality
+    # to load configurations from YAML files.
+    main(
+        learning_rate=0.5,
+        momentum=0.9,
+        weight_decay=0.0001,
+        epochs=5,
+        tensorboard_path=(DATA_PATH / "tensorboard").mkdir(exist_ok=True, parents=True),
+        batch_size=16,
+        max_points=80000,
+        save_frequency=1,
+        save_path=(DATA_PATH / "model").mkdir(exist_ok=True, parents=True),
+    )

@@ -1,9 +1,8 @@
-import pickle
+import random
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 import numpy as np
-import torch
 from pointcloud.config import DATA_PATH
 from pointcloud.processors.base import PointCloudDataset
 from pointcloud.processors.sensat.preprocessing import get_sensat_model_inputs
@@ -90,6 +89,9 @@ class SensatDataSet(PointCloudDataset):
             print(
                 f"Number of iterations required before (somewhat) evenly sampling all files: {len(self.file_indices)}"
             )
+
+        if self.shuffle_indices:
+            random.shuffle(self.file_indices)
 
         # Commented out code at this point is making use of another point selection
         # method that can be used for collecting a sample of pointcloud points.
