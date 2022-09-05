@@ -12,4 +12,4 @@ cd lib/pointops # must be in the directory containing setup.py
 TORCH_CUDA_ARCH_LIST="6.1" MAX_JOBS=4 FORCE_CUDA=1 python setup.py install
 ```
 
-Note that the value for TORCH_CUDA_ARCH_LIST must match the architecture for the GPU that the functions are compiled on whicch can be found [here](https://developer.nvidia.com/cuda-gpus#compute).
+Note that the value for TORCH_CUDA_ARCH_LIST must match the architecture for the GPU that the functions are compiled on which can be found [here](https://developer.nvidia.com/cuda-gpus#compute).

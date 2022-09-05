@@ -1,11 +1,9 @@
 from copy import deepcopy
 from typing import Tuple
 
-import numpy as np
 import pointcloud.utils.pointops as pointops
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from lib.pointops.functions import pointops
 from pointcloud.utils.logging import get_logger
 
@@ -235,18 +233,18 @@ class SimplePointTransformerSeg(nn.Module):
             nn.Conv1d(hidden_channels, num_classes, kernel_size=1),
         )
 
-    def _break_up_pc(self, pc: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        xyz = pc[..., 0:3].contiguous()
+    def _split_inputs(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        points = inputs[..., 0:3].contiguous()
         features = (
-            pc[..., 3:].transpose(1, 2).contiguous()
-            if pc.size(-1) > 3
-            else deepcopy(xyz)
+            inputs[..., 3:].transpose(1, 2).contiguous()
+            if inputs.size(-1) > 3
+            else deepcopy(points)
         )
-        return (xyz, features)
+        return (points, features)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         # stride == 1
-        points, features = self._break_up_pc(inputs)
+        points, features = self._split_inputs(inputs)
         features = self.in_mlp(features)
         p1x1 = self.block1([points, features])
 

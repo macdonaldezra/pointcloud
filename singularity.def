@@ -1,0 +1,38 @@
+Bootstrap: docker
+From: tensorflow/tensorflow:2.9.1-gpu
+
+
+# Environment variables that will be set during runtime
+%environment
+    export VIRTUAL_ENV=/opt/venv
+    export PATH="${VIRTUAL_ENV}/bin:/usr/local/bin:$PATH"
+    export LANG=C.UTF-8
+
+# Copy over files from host to container
+%files
+    pointcloud /code/
+    lib /code/
+    requirements.txt /code/
+
+
+# Install Poetry and Python dependencies
+%post
+    echo "alias python=python3" >> ~/.bashrc && alias python=python3
+
+    cd /code
+    pip install -r requirements.txt
+    HOME=/code
+
+# Executed commands once container is started
+%runscript
+    cd /code/
+    # Modify below environment variables based on architecture of available NVIDIA GPU's on compute nodes
+    export FORCE_CUDA=1
+    export MAX_JOBS=1
+    export TORCH_CUDA_ARCH_LIST="6.0" # for P100 GPUs
+    echo "Attempting to install PointCloud libraries"
+    pushd /code/lib/pointops
+    python setup install
+    popd
+
+    python -m pointcloud.train.point_transformer

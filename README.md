@@ -55,3 +55,7 @@ So far there is a PointNet and PointTransformer found in this repository, with m
 ### Point-Transformer
 
 The Point-Transformer model in this repository has been retrieved from the official [Point-Transformer](https://github.com/POSTECH-CVLab/point-transformer) repository that accompanied the [paper](https://paperswithcode.com/paper/point-transformer-1). This repository requires special PyTorch functions to be compiled before using this model. To compile these please consult the instructions found in `lib/`.
+
+### Singularity
+
+This project includes a Singularity file that can be used for training the Point Transformer model. If this Singularity file is used on any cluster using Slurm, I strongly recommend testing it first using an interactive session to ensure that the model can be trained appropriately.
