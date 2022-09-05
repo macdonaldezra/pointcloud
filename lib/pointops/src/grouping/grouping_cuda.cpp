@@ -1,21 +1,31 @@
-#include <vector>
 #include <torch/serialize/tensor.h>
 #include <ATen/cuda/CUDAContext.h>
+#include <vector>
+
+
 #include "grouping_cuda_kernel.h"
 
 
-void grouping_forward_cuda(int m, int nsample, int c, at::Tensor input_tensor, at::Tensor idx_tensor, at::Tensor output_tensor)
+void grouping_forward_cuda(int b, int c, int n, int m, int nsample, at::Tensor points_tensor, at::Tensor idx_tensor, at::Tensor out_tensor)
 {
-    const float *input = input_tensor.data_ptr<float>();
+    const float *points = points_tensor.data_ptr<float>();
     const int *idx = idx_tensor.data_ptr<int>();
-    float *output = output_tensor.data_ptr<float>();
-    grouping_forward_cuda_launcher(m, nsample, c, input, idx, output);
+    float *out = out_tensor.data_ptr<float>();
+    grouping_forward_cuda_launcher(b, c, n, m, nsample, points, idx, out);
 }
 
-void grouping_backward_cuda(int m, int nsample, int c, at::Tensor grad_output_tensor, at::Tensor idx_tensor, at::Tensor grad_input_tensor)
+void grouping_backward_cuda(int b, int c, int n, int m, int nsample, at::Tensor grad_out_tensor, at::Tensor idx_tensor, at::Tensor grad_points_tensor)
 {
-    const float *grad_output = grad_output_tensor.data_ptr<float>();
+    float *grad_points = grad_points_tensor.data_ptr<float>();
     const int *idx = idx_tensor.data_ptr<int>();
-    float *grad_input = grad_input_tensor.data_ptr<float>();
-    grouping_backward_cuda_launcher(m, nsample, c, grad_output, idx, grad_input);
+    const float *grad_out = grad_out_tensor.data_ptr<float>();
+    grouping_backward_cuda_launcher(b, c, n, m, nsample, grad_out, idx, grad_points);
+}
+
+void grouping_forward_cuda_fast(int b, int c, int n, int npoints, int nsample, at::Tensor points_tensor, at::Tensor idx_tensor, at::Tensor out_tensor) {
+
+    const float *points = points_tensor.data_ptr<float>();
+    const int *idx = idx_tensor.data_ptr<int>();
+    float *out = out_tensor.data_ptr<float>();
+    grouping_forward_cuda_launcher_fast(b, c, n, npoints, nsample, points, idx, out);
 }

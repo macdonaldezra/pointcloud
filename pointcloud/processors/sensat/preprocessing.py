@@ -17,7 +17,7 @@ def get_sensat_model_inputs(
     training: bool = True,
     shuffle_indices: bool = False,
     max_points: int = 80000,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Return a set of sampled pointcloud points, features, and labels as PyTorch tensors.
 
@@ -33,7 +33,8 @@ def get_sensat_model_inputs(
         max_points: The maximum number of points to be sample for a given model. Default is 80,000
 
     Returns:
-        Tuple[np.ndarray, np.ndarray, np.ndarray]: A tuple containing points, features and labels.
+        Tuple[np.ndarray, np.ndarray]: A tuple containing points and features concatenated, and
+            labels.
     """
     if transform:
         points, features, labels = transform(points, features, labels)
@@ -67,4 +68,4 @@ def get_sensat_model_inputs(
     points = torch.FloatTensor(points)
     labels = torch.LongTensor(labels)
 
-    return (points, features, labels)
+    return (torch.cat((points, features), dim=-1), labels)

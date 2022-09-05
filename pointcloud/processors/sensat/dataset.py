@@ -1,8 +1,9 @@
 import random
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
+import torch
 from pointcloud.config import DATA_PATH
 from pointcloud.processors.base import PointCloudDataset
 from pointcloud.processors.sensat.preprocessing import get_sensat_model_inputs
@@ -116,7 +117,7 @@ class SensatDataSet(PointCloudDataset):
         # self.epoch_index = 0
         # self.epoch_indices = None
 
-    def __getitem__(self, index) -> Any:
+    def __getitem__(self, index) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Read in pre-processed voxel-sampled .ply file contents and return randomly sampled
         pointcloud data, feature, and label points.
@@ -127,7 +128,7 @@ class SensatDataSet(PointCloudDataset):
             index = index % len(self.input_files)
 
         points, features, labels = read_ply_file(self.input_files[index])
-        points, features, labels = get_sensat_model_inputs(
+        inputs, labels = get_sensat_model_inputs(
             points,
             features,
             labels,
@@ -136,7 +137,7 @@ class SensatDataSet(PointCloudDataset):
             max_points=self.max_points,
         )
 
-        return points, features, labels
+        return inputs, labels
 
     def __len__(self) -> int:
         if self.distribute_files:

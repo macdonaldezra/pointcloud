@@ -2,86 +2,18 @@ import logging
 import random
 import shutil
 import typing as T
-from cgi import print_form
 from pathlib import Path
 
 import numpy as np
 import pointcloud.utils.transforms as transformers
 import torch
 from pointcloud.config import DATA_PATH
-from pointcloud.models.pointtransformer import (
-    pointtransformer_seg_repro as PointTransformer,
-)
+from pointcloud.models.point_transformer import SimplePointTransformerSeg
 from pointcloud.processors.sensat.dataset import LABELS, SensatDataSet
+from pointcloud.utils.logging import get_logger
+from pointcloud.utils.metrics import MetricCounter, compute_intersection_and_union
 from tensorboardX import SummaryWriter
-
-
-class MetricCounter(object):
-    """
-    Class that computes and stores basic counter state values.
-    """
-
-    def __init__(self) -> None:
-        self.current = 0
-        self.average = 0
-        self.sum = 0
-        self.count = 0
-
-    def reset(self) -> None:
-        self.current = 0
-        self.average = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, value: T.Any, n: int = 1) -> None:
-        """
-        Update the current value, sum, count, and average from the value parameter.
-        """
-        self.current = value
-        self.sum += value * n
-        self.count += n
-        self.average = self.sum / self.count
-
-
-def compute_intersection_and_union(
-    output: torch.Tensor,
-    labels: torch.Tensor,
-    num_classes: int,
-    ignore_index: T.Optional[int] = None,
-) -> T.Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Compute and return the intersection and union of an output and set of labels.
-    """
-    output = output.view(-1)
-    labels = labels.view(-1)
-    if ignore_index:
-        output[labels == ignore_index] = ignore_index
-
-    intersection = output[output == labels]
-    intersection, _ = torch.histc(
-        intersection, bins=num_classes, min=0, max=num_classes - 1
-    )
-    labels_area, _ = torch.histc(labels, bins=num_classes, min=0, max=num_classes - 1)
-    output_area, _ = torch.histc(output, bins=num_classes, min=0, max=num_classes - 1)
-
-    union = labels_area + output_area - intersection
-
-    return intersection, union, labels_area
-
-
-def get_logger() -> logging.RootLogger:
-    """
-    Return a generic logger to be called by the main process training a given model.
-    """
-    logger_name = "Train Logger"
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.INFO)
-    handler = logging.StreamHandler()
-    format = "[%(asctime)s %(levelname)s %(filename)s line %(lineno)d %(process)d] %(message)s"
-    handler.setFormatter(logging.Formatter(format))
-    logger.addHandler(handler)
-
-    return logger
+from tqdm import tqdm
 
 
 def get_transformers(choose: int = 3) -> transformers.DataTransformer:
@@ -108,7 +40,7 @@ def get_transformers(choose: int = 3) -> transformers.DataTransformer:
 
 def collate_fn(
     batch: torch.Tensor,
-) -> T.Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> T.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Overrides the default collate_fn provided by the dataloader. For more
     on this function, see here:
@@ -124,7 +56,6 @@ def collate_fn(
         torch.cat(points),
         torch.cat(features),
         torch.cat(labels),
-        torch.IntTensor(offset),
     )
 
 
@@ -162,17 +93,15 @@ def train(
     union_counter = MetricCounter()
     label_counter = MetricCounter()
 
-    for index, (points, features, labels, offset) in enumerate(data_loader):
-        points, features, labels, offset = (
-            points.cuda(non_blocking=True),
-            features.cuda(non_blocking=True),
+    for index, (inputs, labels) in tqdm(
+        enumerate(data_loader), total=len(data_loader), smoothing=0.9
+    ):
+        inputs, labels = (
+            inputs.cuda(non_blocking=True),
             labels.cuda(non_blocking=True),
-            offset.cuda(non_blocking=True),
         )
-        logger.info(
-            f"Shapes: points - {points.size()}, features - {features.size()}, labels - {labels.size()}, offset - {offset.size()}"
-        )
-        output = model([points, features, offset])
+        logger.info(f"Shapes: points - {inputs.size()}, labels - {labels.size()}")
+        output = model(inputs)
         if labels.shape[-1] == 1:
             labels = labels[:, 0]
 
@@ -182,7 +111,7 @@ def train(
         optimizer.step()
 
         output = output.max(1)[1]
-        n = points.size(0)
+        n = inputs.size(0)
 
         if debug:
             assert output.dim() in [1, 2, 3], f"Actual output dimension: {output.dim()}"
@@ -270,14 +199,14 @@ def validate(
     union_counter = MetricCounter()
     label_counter = MetricCounter()
 
-    for index, (points, features, labels, offset) in enumerate(data_loader):
-        points, features, labels, offset = (
-            points.cuda(non_blocking=True),
-            features.cuda(non_blocking=True),
+    for index, (inputs, labels) in tqdm(
+        enumerate(data_loader), total=len(data_loader), smoothing=0.9
+    ):
+        inputs, labels = (
+            inputs.cuda(non_blocking=True),
             labels.cuda(non_blocking=True),
-            offset.cuda(non_blocking=True),
         )
-        output = model([points, features, offset])
+        output = model(inputs)
         if labels.shape[-1] == 1:
             labels = labels[:, 0]
 
@@ -287,7 +216,7 @@ def validate(
         optimizer.step()
 
         output = output.max(1)[1]
-        n = points.size(0)
+        n = inputs.size(0)
 
         if debug:
             assert output.dim() in [1, 2, 3], f"Actual output dimension: {output.dim()}"
@@ -382,7 +311,9 @@ def main(
         logger.info(f"CUDA must be available for model to run.")
 
     loss_function = torch.nn.CrossEntropyLoss()
-    model = PointTransformer(c=feature_dim, k=num_classes)
+    model = SimplePointTransformerSeg(
+        input_dim=feature_dim, num_classes=num_classes, num_neighbours=16
+    )
     model = torch.nn.DataParallel(model.cuda())
     optimizer = torch.optim.SGD(
         model.parameters(),
@@ -438,7 +369,7 @@ def main(
         shuffle=True,
         drop_last=True,
         pin_memory=True,
-        collate_fn=collate_fn,
+        # collate_fn=collate_fn,
     )
 
     if include_validation:
@@ -450,7 +381,7 @@ def main(
             batch_size=4,
             drop_last=True,
             pin_memory=True,
-            collate_fn=collate_fn,
+            # collate_fn=collate_fn,
         )
     else:
         validation_loader = None

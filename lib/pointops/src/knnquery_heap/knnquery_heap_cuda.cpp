@@ -3,7 +3,7 @@
 
 #include <ATen/cuda/CUDAContext.h>
 
-#include "knnquery_cuda_kernel.h"
+#include "knnquery_heap_cuda_kernel.h"
 
 
 #define CHECK_CUDA(x) TORCH_CHECK(x.is_cuda(), #x, " must be a CUDAtensor ")
@@ -11,7 +11,7 @@
 #define CHECK_INPUT(x) CHECK_CUDA(x);CHECK_CONTIGUOUS(x)
 
 
-void knnquery_cuda(int b, int n, int m, int nsample, at::Tensor xyz_tensor, at::Tensor new_xyz_tensor, at::Tensor idx_tensor, at::Tensor dist2_tensor)
+void knnquery_heap_cuda(int b, int n, int m, int nsample, at::Tensor xyz_tensor, at::Tensor new_xyz_tensor, at::Tensor idx_tensor, at::Tensor dist2_tensor)
 {
     CHECK_INPUT(new_xyz_tensor);
     CHECK_INPUT(xyz_tensor);
@@ -23,5 +23,5 @@ void knnquery_cuda(int b, int n, int m, int nsample, at::Tensor xyz_tensor, at::
 
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
-    knnquery_cuda_launcher(b, n, m, nsample, xyz, new_xyz, idx, dist2, stream);
+    knnquery_heap_cuda_launcher(b, n, m, nsample, xyz, new_xyz, idx, dist2, stream);
 }
