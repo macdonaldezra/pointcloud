@@ -75,9 +75,6 @@ pickleshare==0.7.5
 Pillow==9.2.0
 platformdirs==2.5.2
 pluggy==1.0.0
-point-cloud-utils==0.25.1
-point-transformer-pytorch==0.1.5
-pointops==0.0.0
 pre-commit==2.19.0
 prometheus-client==0.14.1
 prompt-toolkit==3.0.30
@@ -89,7 +86,6 @@ py==1.11.0
 pycparser==2.21
 Pygments==2.12.0
 pyparsing==3.0.9
-pyquaternion==0.9.9
 pyrsistent==0.18.1
 pytest==7.1.2
 python-dateutil==2.8.2
@@ -112,9 +108,9 @@ tokenize-rt==4.2.1
 toml==0.10.2
 tomli==2.0.1
 tomlkit==0.11.1
-torch==1.12.1+cu113
-torchaudio==0.12.1+cu113
-torchvision==0.13.1+cu113
+torch==1.12.1
+torchaudio==0.12.1
+torchvision==0.13.1
 tornado==6.2
 tqdm==4.64.0
 traitlets==5.3.0

@@ -22,7 +22,7 @@ def parse_input_preprocessing_args() -> NamedTuple:
         NamedTuple: Args to be used as input for pre-processing pointcloud data.
     """
     parser = argparse.ArgumentParser(
-        description="Parse command line args for training a segmentation model."
+        description="Parse command line args for pre-processing pointcloud data files."
     )
     parser.add_argument(
         "-g",
@@ -62,5 +62,38 @@ def parse_input_preprocessing_args() -> NamedTuple:
 
     args = parser.parse_args()
     validate_filepath(args.data_directory)
+
+    return args
+
+
+def parse_train_args() -> NamedTuple:
+    """
+    Parse, validate and return args for training a model.
+    """
+    parser = argparse.ArgumentParser(
+        description="Parse command line args for training a segmentation model."
+    )
+    parser.add_argument(
+        "-d",
+        "--data-directory",
+        type=Path,
+        default=DATA_PATH / "sensat_urban" / "grid_0.2",
+        help="The data directory to read sampled .ply files from.",
+    )
+
+    parser.add_argument(
+        "-o",
+        "--output-directory",
+        type=Path,
+        default=DATA_PATH / "output",
+        help="The directory to output files to",
+    )
+
+    args = parser.parse_args()
+    validate_filepath(args.data_directory)
+    if isinstance(args.output_directory, Path):
+        args.output_directory.mkdir(exist_ok=True, parents=True)
+
+    validate_filepath(args.output_directory)
 
     return args

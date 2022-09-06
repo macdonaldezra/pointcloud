@@ -10,6 +10,7 @@ import torch
 from pointcloud.config import DATA_PATH
 from pointcloud.models.point_transformer import SimplePointTransformerSeg
 from pointcloud.processors.sensat.dataset import LABELS, SensatDataSet
+from pointcloud.utils.cli import parse_train_args
 from pointcloud.utils.logging import get_logger
 from pointcloud.utils.metrics import MetricCounter, compute_intersection_and_union
 from tensorboardX import SummaryWriter
@@ -454,9 +455,11 @@ def main(
 if __name__ == "__main__":
     # TODO: Move these configurations to a Pydantic object and add functionality
     # to load configurations from YAML files.
-    tensorboard_path = DATA_PATH / "tensorboard"
+    args = parse_train_args()
+
+    tensorboard_path = args.output_directory / "tensorboard"
     tensorboard_path.mkdir(exist_ok=True)
-    save_path = DATA_PATH / "model"
+    save_path = args.output_directory / "model"
     save_path.mkdir(exist_ok=True)
     manual_seed(32)
 
@@ -471,6 +474,6 @@ if __name__ == "__main__":
         batch_size=16,
         max_points=80000,
         save_frequency=1,
-        data_path=DATA_PATH / "sensat_urban" / "grid_0.2",
+        data_path=args.data_directory,
         save_path=save_path,
     )
