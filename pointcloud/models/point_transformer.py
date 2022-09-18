@@ -1,7 +1,6 @@
 from copy import deepcopy
 from typing import Tuple
 
-import pointcloud.utils.pointops as pointops
 import torch
 import torch.nn as nn
 from lib.pointops.functions import pointops

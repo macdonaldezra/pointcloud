@@ -60,3 +60,21 @@ singularity exec --nv --pwd /code \
       --epochs $EPOCHS \
       --data-directory /data \
       --output-directory /output
+
+singularity exec --nv --pwd /code \
+    --bind /mnt/shared/personal/pointcloud_dl/data/sensat_urban/grid_0.2:/data \
+    --bind /mnt/shared/personal/pointcloud_dl/data/output:/output \
+    point_transformer.image \
+        bash -c '
+            cd /code && \
+            . pointcloud-env/bin/activate && \
+            python -m pointcloud.train.point_transformer \
+                --epochs 2 \
+                --data-directory /data \
+                --output-directory /output
+        '
+
+singularity shell --nv --pwd /code \
+  --bind /home/ejames/scratch/pointcloud_dl/data:/data \
+  --bind /home/ejames/scratch/pointcloud_dl/output:/output \
+  train.image

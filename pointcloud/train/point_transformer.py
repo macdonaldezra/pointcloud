@@ -7,10 +7,9 @@ from pathlib import Path
 import numpy as np
 import pointcloud.utils.transforms as transformers
 import torch
-from pointcloud.config import DATA_PATH
+from pointcloud.config import DATA_PATH, get_model_config
 from pointcloud.models.point_transformer import SimplePointTransformerSeg
 from pointcloud.processors.sensat.dataset import LABELS, SensatDataSet
-from pointcloud.utils.cli import parse_train_args
 from pointcloud.utils.logging import get_logger
 from pointcloud.utils.metrics import MetricCounter, compute_intersection_and_union
 from tensorboardX import SummaryWriter
@@ -164,7 +163,7 @@ def train(
     accuracy = intersection_counter.sum / (label_counter.sum + 1e-10)
     average_iou = np.mean(iou)
     average_accuracy = np.mean(accuracy)
-    total_accuracy = sum(intersection_counter.sum) / sum(label_counter.sum + 1e-10)
+    total_accuracy = sum(intersection_counter.sum) / (label_counter.sum + 1e-10)
 
     logger.info(
         f"Train result at epoch [{current_epoch}/{epochs}:"
@@ -269,7 +268,7 @@ def validate(
     accuracy = intersection_counter.sum / (label_counter.sum + 1e-10)
     average_iou = np.mean(iou)
     average_accuracy = np.mean(accuracy)
-    total_accuracy = sum(intersection_counter.sum) / sum(label_counter.sum + 1e-10)
+    total_accuracy = sum(intersection_counter.sum) / (sum(label_counter.sum) + 1e-10)
 
     logger.info(
         f"Validation result at epoch [{current_epoch}/{epochs}: "
@@ -455,25 +454,25 @@ def main(
 if __name__ == "__main__":
     # TODO: Move these configurations to a Pydantic object and add functionality
     # to load configurations from YAML files.
-    args = parse_train_args()
+    config = get_model_config()
 
-    tensorboard_path = args.output_directory / "tensorboard"
+    tensorboard_path = config.output_path / "tensorboard"
+    save_path = config.output_path / "model"
     tensorboard_path.mkdir(exist_ok=True)
-    save_path = args.output_directory / "model"
     save_path.mkdir(exist_ok=True)
     manual_seed(32)
 
     main(
-        feature_dim=6,
+        feature_dim=config.feature_dim,
         num_classes=len(LABELS),
-        learning_rate=0.5,
+        learning_rate=config.learning_rate,
         momentum=0.9,
-        weight_decay=0.0001,
-        epochs=5,
+        weight_decay=config.learning_rate_weight_decay,
+        epochs=config.epochs,
         tensorboard_path=tensorboard_path,
-        batch_size=16,
-        max_points=80000,
-        save_frequency=1,
-        data_path=args.data_directory,
+        batch_size=config.batch_size,
+        max_points=config.pointcloud_input_size,
+        save_frequency=config.save_frequency,
+        data_path=config.data_path,
         save_path=save_path,
     )

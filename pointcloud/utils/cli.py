@@ -88,6 +88,20 @@ def parse_train_args() -> NamedTuple:
         default=DATA_PATH / "output",
         help="The directory to output files to",
     )
+    parser.add_argument(
+        "-b",
+        "--batch-size",
+        type=int,
+        default=16,
+        help="The size of training batches",
+    )
+    parser.add_argument(
+        "-e",
+        "--epochs",
+        type=int,
+        default=5,
+        help="The number of epochs to train the model for",
+    )
 
     args = parser.parse_args()
     validate_filepath(args.data_directory)
