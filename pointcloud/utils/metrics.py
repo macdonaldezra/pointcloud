@@ -46,11 +46,11 @@ def compute_intersection_and_union(
         output[labels == ignore_index] = ignore_index
 
     intersection = output[output == labels]
-    intersection, _ = torch.histc(
+    intersection = torch.histc(
         intersection, bins=num_classes, min=0, max=num_classes - 1
     )
-    labels_area, _ = torch.histc(labels, bins=num_classes, min=0, max=num_classes - 1)
-    output_area, _ = torch.histc(output, bins=num_classes, min=0, max=num_classes - 1)
+    labels_area = torch.histc(labels, bins=num_classes, min=0, max=num_classes - 1)
+    output_area = torch.histc(output, bins=num_classes, min=0, max=num_classes - 1)
 
     union = labels_area + output_area - intersection
 

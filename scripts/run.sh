@@ -1,5 +1,4 @@
 #!/bin/bash
-
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=16G
@@ -7,19 +6,11 @@
 #SBATCH --time=0-00:10:00
 #SBATCH --output=%N-%j.out
 
-# set -eo pipefail
-
-EPOCHS=2
 DATA_PATH=""
 OUTPUT_PATH=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    -e|--epochs)
-      EPOCHS="$2"
-      shift # past argument
-      shift # past value
-      ;;
     -d|--data-directory)
       DATA_PATH="$2"
       shift # past argument

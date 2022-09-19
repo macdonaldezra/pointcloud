@@ -81,7 +81,7 @@ def train(
     epochs: int,
     num_classes: int,
     ignore_index: T.Optional[int] = None,
-    debug: bool = True,
+    debug: bool = False,
     print_frequency: int = 5,
 ) -> T.Tuple[float, float, float, float]:
     """
@@ -100,7 +100,6 @@ def train(
             inputs.cuda(non_blocking=True),
             labels.cuda(non_blocking=True),
         )
-        logger.info(f"Shapes: points - {inputs.size()}, labels - {labels.size()}")
         output = model(inputs)
         if labels.shape[-1] == 1:
             labels = labels[:, 0]
@@ -135,17 +134,19 @@ def train(
         label_counter.update(labels)
         current_iter = current_epoch * len(data_loader) + index + 1
 
-        accuracy = sum(intersection_counter.value) / (sum(labels.value) + 1e-10)
+        accuracy = sum(intersection_counter.current) / (
+            sum(label_counter.current) + 1e-10
+        )
         loss_counter.update(loss.item(), n)
 
         if (index + 1) % print_frequency == 0:
             logger.info(
-                f"Epoch: [{current_epoch}/{epochs}] Loss: {loss_counter.value} Accuracy: {accuracy}"
+                f"Epoch: [{current_epoch}/{epochs}] Loss: {loss_counter.current} Accuracy: {accuracy}"
             )
 
         # Update TensorBoard Writer values
         tensorboard_writer.add_scalar(
-            "loss_train_batch", loss_counter.value, current_iter
+            "loss_train_batch", loss_counter.current, current_iter
         )
         tensorboard_writer.add_scalar(
             "mean_intersection_over_union_train_batch",
@@ -185,7 +186,7 @@ def validate(
     epochs: int,
     num_classes: int,
     ignore_index: T.Optional[int] = None,
-    debug: bool = True,
+    debug: bool = False,
     print_frequency: int = 5,
 ) -> T.Tuple[float, float, float, float]:
     """
@@ -240,17 +241,19 @@ def validate(
         label_counter.update(labels)
         current_iter = current_epoch * len(data_loader) + index + 1
 
-        accuracy = sum(intersection_counter.value) / (sum(labels.value) + 1e-10)
+        accuracy = sum(intersection_counter.current) / (
+            sum(label_counter.current) + 1e-10
+        )
         loss_counter.update(loss.item(), n)
 
         if (index + 1) % print_frequency == 0:
             logger.info(
-                f"Epoch: [{current_epoch}/{epochs}] Loss: {loss_counter.value} Accuracy: {accuracy}"
+                f"Epoch: [{current_epoch}/{epochs}] Loss: {loss_counter.current} Accuracy: {accuracy}"
             )
 
         # Update TensorBoard Writer values
         tensorboard_writer.add_scalar(
-            "loss_train_batch", loss_counter.value, current_iter
+            "loss_train_batch", loss_counter.current, current_iter
         )
         tensorboard_writer.add_scalar(
             "mean_intersection_over_union_train_batch",
