@@ -42,7 +42,6 @@ done
 
 
 # Find latetst Singularity module on Compute Canada by running 'module spider singularity'
-# module purge
 module load singularity/3.8
 module load cuda/11.2.2 cudnn/8.2.0
 
@@ -50,31 +49,8 @@ mkdir -p /scratch/$USER/singularity/{cache,tmp}
 export SINGULARITY_CACHEDIR="/scratch/$USER/singularity/cache"
 export SINGULARITY_TMPDIR="/scratch/$USER/singularity/tmp"
 
-# #
-# # Pipe output to another file
-# #
-singularity exec --nv --pwd /code \
+# Set path for config file and start training the model
+export SINGULARITYENV_MODEL_CONFIG="/data/config.yaml"
+singularity run --nv --pwd /code \
   --bind $DATA_PATH:/data --bind $OUTPUT_PATH:/output \
-  train.image \
-    python -m pointcloud.train.point_transformer \
-      --epochs $EPOCHS \
-      --data-directory /data \
-      --output-directory /output
-
-singularity exec --nv --pwd /code \
-    --bind /mnt/shared/personal/pointcloud_dl/data/sensat_urban/grid_0.2:/data \
-    --bind /mnt/shared/personal/pointcloud_dl/data/output:/output \
-    point_transformer.image \
-        bash -c '
-            cd /code && \
-            . pointcloud-env/bin/activate && \
-            python -m pointcloud.train.point_transformer \
-                --epochs 2 \
-                --data-directory /data \
-                --output-directory /output
-        '
-
-singularity shell --nv --pwd /code \
-  --bind /home/ejames/scratch/pointcloud_dl/data:/data \
-  --bind /home/ejames/scratch/pointcloud_dl/output:/output \
   train.image

@@ -7,5 +7,5 @@ pointcloud_input_size: 80000
 save_frequency: 1
 
 # set data and output path in environment
-data_path: /mnt/shared/personal/pointcloud_dl/data/sensat_urban/grid_0.2
-output_path: /mnt/shared/personal/pointcloud_dl/data/output
+data_path: ~/
+output_path: ~/
