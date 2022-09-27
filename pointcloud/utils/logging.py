@@ -11,6 +11,8 @@ def get_logger() -> logging.RootLogger:
     handler = logging.StreamHandler()
     format = "[%(asctime)s %(levelname)s %(filename)s line %(lineno)d %(process)d] %(message)s"
     handler.setFormatter(logging.Formatter(format))
-    logger.addHandler(handler)
+
+    if not logger.hasHandlers():
+        logger.addHandler(handler)
 
     return logger

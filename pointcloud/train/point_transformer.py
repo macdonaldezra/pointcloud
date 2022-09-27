@@ -29,7 +29,7 @@ def get_transformers(choose: int = 3) -> transformers.DataTransformer:
             transformers.RandomPointJitter(),
             transformers.RandomlyDropColor(),
             transformers.RandomlyShiftBrightness(),
-            transformers.ChromaticColorContrast(),
+            # transformers.ChromaticColorContrast(),
             transformers.ChromaticColorTranslation(),
             transformers.ChromaticColorJitter(),
             transformers.HueSaturationTranslation(),
@@ -381,11 +381,12 @@ def main(
         )
         validation_loader = torch.utils.data.DataLoader(
             validation_data,
-            batch_size=4,
+            batch_size=batch_size,
             drop_last=True,
             pin_memory=True,
             # collate_fn=collate_fn,
         )
+        logger.info(f"Count of validation data samples: {len(validation_data)}")
     else:
         validation_loader = None
 
