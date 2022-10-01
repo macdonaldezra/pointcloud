@@ -303,6 +303,7 @@ def main(
     weights_path: T.Optional[Path] = None,
     checkpoint_path: T.Optional[Path] = None,
     include_validation: bool = True,
+    class_weights: T.List[float] = None,
 ) -> None:
     """
     The main training loop that performs train and validation steps to train point_transformer.
@@ -313,11 +314,11 @@ def main(
     if not torch.cuda.is_available():
         logger.info(f"CUDA must be available for model to run.")
 
-    loss_function = torch.nn.CrossEntropyLoss()
+    loss_function = torch.nn.CrossEntropyLoss(weight=torch.Tensor(class_weights))
     model = SimplePointTransformerSeg(
         input_dim=feature_dim, num_classes=num_classes, num_neighbours=16
     )
-    model = torch.nn.DataParallel(model.cuda())
+    model = model.cuda()
     optimizer = torch.optim.SGD(
         model.parameters(),
         lr=learning_rate,
@@ -479,4 +480,5 @@ if __name__ == "__main__":
         save_frequency=config.save_frequency,
         data_path=config.data_path,
         save_path=save_path,
+        class_weights=config.class_weights,
     )

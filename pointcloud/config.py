@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import IO, Any, Dict, Union
+from typing import IO, Any, Dict, List, Union
 
 from pydantic import BaseModel, Field
 from ruamel.yaml import YAML
@@ -23,6 +23,7 @@ class TrainingConfig(BaseModel):
     batch_size: int
     pointcloud_input_size: int
     save_frequency: int
+    class_weights: List[float]
 
     data_path: Path = Field(..., env="DATA_PATH")
     output_path: Path = Field(..., env="OUTPUT_PATH")

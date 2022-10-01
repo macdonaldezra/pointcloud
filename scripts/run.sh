@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=16G
+#SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --time=0-00:10:00
 #SBATCH --output=%N-%j.out
@@ -43,5 +43,6 @@ export SINGULARITY_TMPDIR="/scratch/$USER/singularity/tmp"
 # Set path for config file and start training the model
 export SINGULARITYENV_MODEL_CONFIG="/data/config.yaml"
 singularity run --nv --pwd /code \
-  --bind $DATA_PATH:/data --bind $OUTPUT_PATH:/output \
+  --bind $DATA_PATH:/data \
+  --bind $OUTPUT_PATH:/output \
   train.image

@@ -151,3 +151,4 @@ cython_debug/
 
 output/
 tensorboard/
+custom_scripts/

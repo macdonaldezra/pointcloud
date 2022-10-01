@@ -28,7 +28,7 @@ fastjsonschema==2.15.3
 filelock==3.7.1
 fonttools==4.34.4
 identify==2.5.1
-idna==3.3
+idna==3.4
 importlib-metadata==4.12.0
 iniconfig==1.1.1
 ipykernel==6.15.1
@@ -63,7 +63,7 @@ nest-asyncio==1.5.5
 nodeenv==1.7.0
 notebook==6.4.12
 notebook-shim==0.1.0
-numpy==1.23.1
+numpy==1.23.3
 open3d==0.15.2
 packaging==21.3
 pandas==1.4.3
@@ -111,14 +111,14 @@ tokenize-rt==4.2.1
 toml==0.10.2
 tomli==2.0.1
 tomlkit==0.11.1
-torch==1.12.1
-torchaudio==0.12.1
-torchvision==0.13.1
+torch==1.12.1+cu113
+torchaudio==0.12.1+cu113
+torchvision==0.13.1+cu113
 tornado==6.2
 tqdm==4.64.0
 traitlets==5.3.0
 typing_extensions==4.3.0
-urllib3==1.26.10
+urllib3==1.26.12
 virtualenv==20.15.1
 wcwidth==0.2.5
 webencodings==0.5.1
