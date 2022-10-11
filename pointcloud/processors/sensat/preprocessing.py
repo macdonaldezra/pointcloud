@@ -4,6 +4,52 @@ import numpy as np
 import torch
 
 
+def sample_points(
+    points: np.ndarray,
+    features: np.ndarray,
+    labels: np.ndarray,
+    num_points: int,
+    shuffle_indices: bool = False,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Sample points until we reach num_points number of points in the set of indices.
+
+    If the number of sampled indices is not enough to reach num_points, then continue choosing
+    a random point from the pointcloud, and appending the neighbouring set of points to the current
+    set of pointcloud indices. This sampling technique will always return the specified
+    number of points.
+
+    Note: This function doesn't work when being called by the below function. :-(
+    """
+    start_index = np.random.randint(labels.shape[0])
+    sorted_indices = np.argsort(np.sum(np.square(points - points[start_index]), 1))
+    if sorted_indices.shape[0] < num_points:
+        indices = sorted_indices
+        while indices.shape[0] < num_points:
+            start_index = np.random.randint(labels.shape[0])
+            sorted_indices = np.argsort(
+                np.sum(np.square(points - points[start_index]), 1)
+            )
+            if sorted_indices.shape[0] + indices.shape[0] > num_points:
+                last_index = num_points - indices.shape[0]
+                indices = np.concatenate([indices, sorted_indices[:last_index]])
+            else:
+                indices = np.concatenate([indices, sorted_indices])
+    else:
+        indices = sorted_indices[:num_points]
+
+    if shuffle_indices:
+        indices = np.arange(labels.shape[0])
+        np.random.shuffle(indices)
+        points, features, labels = points[indices], features[indices], labels[indices]
+
+    points[:] = points[indices]
+    features[:] = features[indices]
+    labels[:] = labels[indices]
+
+    return (points, features, labels)
+
+
 def get_sensat_model_inputs(
     points: np.ndarray,
     features: np.ndarray,
@@ -14,10 +60,9 @@ def get_sensat_model_inputs(
             list[np.ndarray, np.ndarray, np.ndarray],
         ]
     ] = None,
-    training: bool = True,
     shuffle_indices: bool = False,
     max_points: int = 80000,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Return a set of sampled pointcloud points, features, and labels as PyTorch tensors.
 
@@ -36,30 +81,37 @@ def get_sensat_model_inputs(
         Tuple[np.ndarray, np.ndarray]: A tuple containing points and features concatenated, and
             labels.
     """
+    start_index = np.random.randint(labels.shape[0])
+    sorted_indices = np.argsort(np.sum(np.square(points - points[start_index]), 1))
+    if sorted_indices.shape[0] < max_points:
+        indices = sorted_indices
+        while indices.shape[0] < max_points:
+            start_index = np.random.randint(labels.shape[0])
+            sorted_indices = np.argsort(
+                np.sum(np.square(points - points[start_index]), 1)
+            )
+            if sorted_indices.shape[0] + indices.shape[0] > max_points:
+                last_index = max_points - indices.shape[0]
+                indices = np.concatenate([indices, sorted_indices[:last_index]])
+            else:
+                indices = np.concatenate([indices, sorted_indices])
+    else:
+        indices = sorted_indices[:max_points]
+
+    if shuffle_indices:
+        np.random.shuffle(indices)
+
+    points, features, labels = points[indices], features[indices], labels[indices]
+
+    assert (
+        points.shape[0] == max_points
+    ), f"Number of returned points: {points.shape} != {max_points}"
+
     if transform:
         points, features, labels = transform(points, features, labels)
 
-    if max_points and labels.shape[0] > max_points:
-        if training:
-            start_index = np.random.randint(labels.shape[0])
-        else:
-            start_index = labels.shape[0] // 2
-
-        indices = np.argsort(np.sum(np.square(points - points[start_index]), 1))[
-            :max_points
-        ]
-        points, features, labels = points[indices], features[indices], labels[indices]
-
-    if shuffle_indices:
-        indices = np.arange(labels.shape[0])
-        np.random.shuffle(indices)
-        points, features, labels = points[indices], features[indices], labels[indices]
-
-    min_point = np.min(points, 0)
-    points -= min_point
-
     if np.max(features) > 1:
-        # default normalization to divide all additional features by 255 as
+        # Default normalization to divide all additional features by 255 as
         # you would for RGB colors
         features = torch.FloatTensor(features) / 255.0
     else:

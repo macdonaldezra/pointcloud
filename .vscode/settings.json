@@ -61,7 +61,7 @@
     "python.testing.unittestEnabled": false,
 
     // Paths to Python
-    "python.pythonPath": "${env:PYENV_ROOT}/versions/pointcloud-dl-env/bin/python",
+    "python.defaultInterpreterPath": "${env:PYENV_ROOT}/versions/pointcloud-dl-env/bin/python",
 
     // JSON, YAML & TOML settings
     "[JSON]": {

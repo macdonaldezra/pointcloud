@@ -1,4 +1,5 @@
 import random
+from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
 
@@ -8,8 +9,7 @@ from pointcloud.config import DATA_PATH
 from pointcloud.processors.base import PointCloudDataset
 from pointcloud.processors.sensat.preprocessing import get_sensat_model_inputs
 from pointcloud.utils.files import distribute_indices, get_files
-
-from ...utils.io import read_ply_file
+from pointcloud.utils.io import read_ply_file
 
 LABELS = {
     0: "Ground",
@@ -64,6 +64,7 @@ class SensatDataSet(PointCloudDataset):
         shuffle_indices: bool = False,
         include_labels: bool = True,
         distribute_files: bool = True,
+        cache_size: int = 10,
     ) -> None:
         """
         Initialize SensatUrban Pointcloud dataset.
@@ -83,6 +84,8 @@ class SensatDataSet(PointCloudDataset):
         self.num_clouds = 0
         self.input_files = []
         self.file_indices = []
+        self.cache_size = cache_size
+        self.point_cache = OrderedDict()
 
         # load files into the input_files list
         self.load_data_files()
@@ -94,29 +97,6 @@ class SensatDataSet(PointCloudDataset):
         if self.shuffle_indices:
             random.shuffle(self.file_indices)
 
-        # Commented out code at this point is making use of another point selection
-        # method that can be used for collecting a sample of pointcloud points.
-        #
-        # self.potentials = []
-        # self.min_potentials = []
-        # self.argmin_potentials = []
-        # for tree in self.pot_trees:
-        #     self.potentials.append(
-        #         torch.from_numpy(np.random.rand(tree.data.shape[0]) * 1e-3)
-        #     )
-        #     min_index = int(torch.argmin(self.potentials[-1]))
-        #     self.argmin_potentials.append(min_index)
-        #     self.min_potentials.append(float(self.potentials[-1][min_index]))
-
-        # self.argmin_potentials = torch.from_numpy(
-        #     np.array(self.argmin_potentials, dtype=np.int64)
-        # )
-        # self.min_potentials = torch.from_numpy(
-        #     np.array(self.min_potentials, dtype=np.float64)
-        # )
-        # self.epoch_index = 0
-        # self.epoch_indices = None
-
     def __getitem__(self, index) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Read in pre-processed voxel-sampled .ply file contents and return randomly sampled
@@ -127,7 +107,7 @@ class SensatDataSet(PointCloudDataset):
         else:
             index = index % len(self.input_files)
 
-        points, features, labels = read_ply_file(self.input_files[index])
+        points, features, labels = self.get_pointcloud(self.input_files[index])
         inputs, labels = get_sensat_model_inputs(
             points,
             features,
@@ -173,87 +153,20 @@ class SensatDataSet(PointCloudDataset):
 
         self.file_indices = distribute_indices(self.input_files)
 
-    # def get_potential_item(self, batch_index: int):
+    def get_pointcloud(
+        self, filename: str
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Check if a pointcloud file's contents are in the cache, if not
+        read them from a file and store them in the file cache.
+        """
+        if filename in self.point_cache:
+            points, colors, labels = self.point_cache[filename]
+            return points, colors, labels
 
-    #     batch_size = 0
+        points, colors, labels = read_ply_file(filename)
+        if len(self.point_cache.keys()) == self.cache_size:
+            self.point_cache.popitem(last=False)
+            self.point_cache[filename] = (points.copy(), colors.copy(), labels.copy())
 
-    #     all_points = []
-    #     all_features = []
-    #     all_labels = []
-    #     all_input_indices = []
-    #     point_indices = []
-    #     cloud_indices = []
-
-    #     while batch_size < self.batch_limit:
-
-    #         cloud_index = int(torch.argmin(self.min_potentials))
-    #         point_index = int(self.argmin_potentials[cloud_index])
-
-    #         # Get potential points from tree structure
-    #         potential_points = np.array(self.pot_trees[point_index, :].data, copy=False)
-    #         center_point = potential_points[point_index, :].reshape(1, -1)
-
-    #         # Get indices of points in the input region
-    #         # TODO: Make radius of the input sphere (value for input_radius) configurable.
-    #         input_radius = 1.0
-    #         potential_indices, distances = self.pot_trees[cloud_index].query_radius(
-    #             center_point, r=input_radius, return_distance=True
-    #         )
-
-    #         dist_squared = np.square(distances[0])
-    #         potential_indices = potential_indices[0]
-
-    #         tukey_loss = np.square(1 - dist_squared / np.square(input_radius))
-    #         tukey_loss[dist_squared > np.square(input_radius)] = 0
-    #         self.potentials[cloud_index][potential_indices] += tukey_loss
-
-    #         min_index = torch.argmin(self.potentials[cloud_index])
-    #         self.min_potentials[[cloud_index]] = self.potentials[cloud_index][min_index]
-    #         self.argmin_potentials[[cloud_index]] = min_index
-
-    #         points = np.array(self.input_trees[cloud_index].data, copy=False)
-    #         input_indices = self.input_trees[cloud_index].query_radius(
-    #             center_point, r=input_radius
-    #         )[0]
-    #         n = input_indices.shape[0]
-
-    #         if n < 2:
-    #             # don't add this pointcloud to the batch as it represents an empty sphere
-    #             continue
-
-    #         input_points = (points[input_indices] - center_point).astype(np.float32)
-    #         input_colors = self.input_colors[cloud_index][input_indices]
-    #         if self.training:
-    #             input_labels = self.input_labels[cloud_index][input_indices]
-    #             input_labels = np.array([self.label_to_index[l] for l in input_labels])
-    #         else:
-    #             input_labels = np.zeros(input_points.shape[0])
-
-    #         input_features = np.hstack(
-    #             (input_colors, input_points[:, 2:] + center_point[:, 2:])
-    #         ).astype(np.float32)
-
-    #         # Add this iterations points to lists
-    #         all_points.append(input_points)
-    #         all_features.append(input_features)
-    #         all_labels.append(input_labels)
-    #         all_input_indices.append(input_indices)
-    #         point_indices.append(point_index)
-    #         cloud_indices.append(cloud_index)
-
-    #         batch_size += n
-
-    #     # Concatenate each component of the batch
-    #     stacked_points = np.concatenate(all_points, axis=0)
-    #     features = np.concatenate(all_features, axis=0)
-    #     labels = np.concatenate(all_labels, axis=0)
-    #     input_inds = np.concatenate(all_input_indices, axis=0)
-    #     stack_lengths = np.array([p.shape[0] for p in all_points], dtype=np.int32)
-
-    #     stacked_features = np.ones_like(stacked_points[:, :1], dtype=np.float32)
-    #     np.hstack((stacked_features, features))
-
-    #     # Get segmentation inputs
-    #     # input_list += [cloud_indices, point_indices, input_indices]
-
-    #     return [cloud]
+        return (points, colors, labels)

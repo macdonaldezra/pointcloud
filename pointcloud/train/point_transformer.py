@@ -38,27 +38,6 @@ def get_transformers(choose: int = 3) -> transformers.DataTransformer:
     )
 
 
-def collate_fn(
-    batch: torch.Tensor,
-) -> T.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Overrides the default collate_fn provided by the dataloader. For more
-    on this function, see here:
-        https://pytorch.org/docs/stable/data.html#working-with-collate-fn
-    """
-    points, features, labels = list(zip(*batch))
-    offset, count = [], 0
-    for item in points:
-        count += item.shape[0]
-        offset.append(count)
-
-    return (
-        torch.cat(points),
-        torch.cat(features),
-        torch.cat(labels),
-    )
-
-
 def manual_seed(seed: int) -> None:
     """
     Seed random, numpy, and PyTorch.
@@ -93,9 +72,7 @@ def train(
     union_counter = MetricCounter()
     label_counter = MetricCounter()
 
-    for index, (inputs, labels) in tqdm(
-        enumerate(data_loader), total=len(data_loader), smoothing=0.9
-    ):
+    for index, (inputs, labels) in enumerate(data_loader):
         inputs, labels = (
             inputs.cuda(non_blocking=True),
             labels.cuda(non_blocking=True),
@@ -164,12 +141,14 @@ def train(
     accuracy = intersection_counter.sum / (label_counter.sum + 1e-10)
     average_iou = np.mean(iou)
     average_accuracy = np.mean(accuracy)
-    total_accuracy = sum(intersection_counter.sum) / (label_counter.sum + 1e-10)
+    total_accuracy = np.sum(intersection_counter.sum) / (
+        np.sum(label_counter.sum) + 1e-10
+    )
 
     logger.info(
         f"Train result at epoch [{current_epoch}/{epochs}:"
-        + " Average IoU = {average_iou:.4f}, Average Accuracy: {average_accuracy:.4f}"
-        + "All Accuracy: {total_accuracy:.4f}"
+        + f" Average IoU = {average_iou:.4f}, Average Accuracy: {average_accuracy:.4f} "
+        + f"All Accuracy: {total_accuracy:.4f}"
     )
 
     return (loss_counter.average, average_iou, average_accuracy, total_accuracy)
@@ -200,9 +179,7 @@ def validate(
     union_counter = MetricCounter()
     label_counter = MetricCounter()
 
-    for index, (inputs, labels) in tqdm(
-        enumerate(data_loader), total=len(data_loader), smoothing=0.9
-    ):
+    for index, (inputs, labels) in enumerate(data_loader):
         inputs, labels = (
             inputs.cuda(non_blocking=True),
             labels.cuda(non_blocking=True),
@@ -271,17 +248,19 @@ def validate(
     accuracy = intersection_counter.sum / (label_counter.sum + 1e-10)
     average_iou = np.mean(iou)
     average_accuracy = np.mean(accuracy)
-    total_accuracy = sum(intersection_counter.sum) / (sum(label_counter.sum) + 1e-10)
+    total_accuracy = np.sum(intersection_counter.sum) / (
+        np.sum(label_counter.sum) + 1e-10
+    )
 
     logger.info(
         f"Validation result at epoch [{current_epoch}/{epochs}: "
         + f"Average IoU = {average_iou:.4f}, Average Accuracy: {average_accuracy:.4f} "
         + f"All Accuracy: {total_accuracy:.4f}"
     )
-    for i in range(num_classes):
-        logger.info(
-            f"Class: {LABELS[index]} Result: IOU = {iou[index]}, Accuracy = {accuracy[index]}"
-        )
+    # for i in range(num_classes):
+    #     logger.info(
+    #         f"Class: {LABELS[i]} Result: IOU = {iou[i]}, Accuracy = {accuracy[i]}"
+    #     )
     logger.info("<<<<<<<<<<<<<<<<< End Evaluation <<<<<<<<<<<<<<<<<")
 
     return (loss_counter.average, average_iou, average_accuracy, total_accuracy)
@@ -314,11 +293,11 @@ def main(
     if not torch.cuda.is_available():
         logger.info(f"CUDA must be available for model to run.")
 
-    loss_function = torch.nn.CrossEntropyLoss(weight=torch.Tensor(class_weights))
     model = SimplePointTransformerSeg(
         input_dim=feature_dim, num_classes=num_classes, num_neighbours=16
     )
     model = model.cuda()
+    loss_function = torch.nn.CrossEntropyLoss(weight=torch.Tensor(class_weights).cuda())
     optimizer = torch.optim.SGD(
         model.parameters(),
         lr=learning_rate,
@@ -373,7 +352,6 @@ def main(
         shuffle=True,
         drop_last=True,
         pin_memory=True,
-        # collate_fn=collate_fn,
     )
 
     if include_validation:
@@ -385,7 +363,6 @@ def main(
             batch_size=batch_size,
             drop_last=True,
             pin_memory=True,
-            # collate_fn=collate_fn,
         )
         logger.info(f"Count of validation data samples: {len(validation_data)}")
     else:
